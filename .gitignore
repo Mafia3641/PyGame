@@ -1,5 +1,4 @@
-/.venv/
+# Объединённый вариант
 __pycache__/
-.idea/::wq
-
-
+.venv/
+.idea/
