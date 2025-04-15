@@ -2,8 +2,9 @@ import pygame
 import sys
 from utils import load_sprite
 from models import Player
-from constants import WINDOW_WIDTH, WINDOW_HEIGHT
+from constants import WINDOW_WIDTH, WINDOW_HEIGHT, FPS
 from camera import Camera
+from enemy import Monkey
 
 class Game:
     def __init__(self):
@@ -12,17 +13,22 @@ class Game:
         self.background = load_sprite("grass", False)
         self.background_width = self.background.get_width()
         self.background_height = self.background.get_height()
-
+    
         self.player = Player(position=(400, 300))
         self.camera = Camera(WINDOW_WIDTH, WINDOW_HEIGHT)
+        self.enemies = []
+        
         self.clock = pygame.time.Clock()
 
     def main_loop(self):
+        self._spawn_enemy(enemy_type='monkey', position=(450, 350))
         while True:
+            dt = self.clock.tick(FPS) / 1000
             self._handle_events()
-            self._process_game_logic()
+            self._process_game_logic(dt)
             self._draw()
-            self.clock.tick(240)
+        
+            
 
     def _init_pygame(self):
         pygame.init()
@@ -34,9 +40,16 @@ class Game:
                 pygame.quit()
                 sys.exit()
 
-    def _process_game_logic(self):
-        self.player.update(self.camera)
-
+    def _process_game_logic(self, dt):
+        self.player.update(self.camera, dt)
+        for enemy in self.enemies:
+            enemy.update(dt)
+    
+    def _spawn_enemy(self, enemy_type: str, position: tuple):
+        enemy = Monkey(position, target=self.player)
+        self.enemies.append(enemy)
+        print("Enemy created")
+    
     def _draw_background(self):
         """
         Отрисовка 3x3 тайлов с корректным смещением относительно камеры.
@@ -59,5 +72,10 @@ class Game:
         # при этом игрок всегда оказывается по центру экрана.
         self._draw_background()
         # Отрисовываем игрока с учетом смещения камеры
-        self.player.draw(self.screen, self.camera)
+        render_objects = [self.player] + self.enemies
+        render_objects.sort(key=lambda obj: obj.rect.centery)
+        
+        for obj in render_objects:
+            obj.draw(self.screen, self.camera)
+        
         pygame.display.update()

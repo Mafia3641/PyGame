@@ -39,30 +39,25 @@ class Player(GameObject):
 		self.speed = SPEED
 		super().__init__(position, load_sprite('hero_v1'), Vector2(0))
 	
-	def update(self, camera=None):
+	def update(self, camera=None, dt=0):
 		keys = pygame.key.get_pressed()
 		# Обрабатываем пережвижение персонажа
 		self.direction.x = keys[pygame.K_d] - keys[pygame.K_a]
 		self.direction.y = keys[pygame.K_s] - keys[pygame.K_w]
-		# Нормализуем вектор по длине
+
 		if self.direction.length() > 0:
 			self.direction = self.direction.normalize()
-		# Устанавливаем скорость
-		self.velocity += self.direction
-		# Нормализуем скорость
+			self.velocity = self.direction * self.speed * dt
 		if self.velocity.length() > self.speed:
 			self.velocity = self.velocity.normalize() * self.speed
-		
-		# Трение (замедление при отсутствии ввода)
 		if self.direction.length() == 0:
-			self.velocity *= 0.9
+			self.velocity *= 0.8
 			if self.velocity.length() < 0.1:  # Полная остановка при малой скорости
 				self.velocity = Vector2(0, 0)
-		
-		# Обновление позиции
 		self.position += self.velocity
 		self.rect.x = self.position.x - self.radius
 		self.rect.y = self.position.y - self.radius
-		# Обновляем камеру, если она передана
+		
 		if camera:
 			camera.update(self)
+
