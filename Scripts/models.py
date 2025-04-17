@@ -1,7 +1,7 @@
 import pygame
 from pygame.math import Vector2
 from utils import load_sprite
-from constants import SPEED, UP
+from constants import SPEED
 
 class GameObject:
 	def __init__(self, position: tuple, sprite, velocity: Vector2):
@@ -37,27 +37,69 @@ class Player(GameObject):
 	def __init__(self, position: tuple):
 		self.direction = Vector2(0, 0)
 		self.speed = SPEED
-		super().__init__(position, load_sprite('hero_v1'), Vector2(0))
-	
+		self.idle_sprites = [
+			load_sprite('Player_Idle/player_idle_1'),
+			load_sprite('Player_Idle/player_idle_2')
+		]
+		self.move_sprites = [
+			load_sprite('Player_Move/player_move_1'),
+			load_sprite('Player_Move/player_move_2'),
+			load_sprite('Player_Move/player_move_3'),
+			load_sprite('Player_Move/player_move_4')
+		]
+		self.last_direction = Vector2(1, 0)
+		self.current_sprite_index = 0
+		self.current_animation = self.idle_sprites
+		self.previous_animation = self.current_animation
+		self.animation_speed = 0.5
+		self.animation_timer = 0
+
+		super().__init__(position, self.idle_sprites[0], Vector2(0))
+
 	def update(self, camera=None, dt=0):
 		keys = pygame.key.get_pressed()
-		# Обрабатываем пережвижение персонажа
 		self.direction.x = keys[pygame.K_d] - keys[pygame.K_a]
 		self.direction.y = keys[pygame.K_s] - keys[pygame.K_w]
 
+		# Обновляем направление
+		if self.direction.x != 0:
+			self.last_direction.x = self.direction.x
+
+		# Физика движения
 		if self.direction.length() > 0:
 			self.direction = self.direction.normalize()
 			self.velocity = self.direction * self.speed * dt
-		if self.velocity.length() > self.speed:
-			self.velocity = self.velocity.normalize() * self.speed
-		if self.direction.length() == 0:
+			self.current_animation = self.move_sprites
+			self.animation_speed = 0.15  # Быстрая анимация при беге
+		else:
+			self.current_animation = self.idle_sprites
+			self.animation_speed = 0.5  # Медленная анимация при покое
 			self.velocity *= 0.8
-			if self.velocity.length() < 0.1:  # Полная остановка при малой скорости
+			if self.velocity.length() < 0.1:
 				self.velocity = Vector2(0, 0)
+
+		if self.current_animation != self.previous_animation:
+			self.current_sprite_index = 0
+			self.previous_animation = self.current_animation
+
+		# Обновляем анимацию (без сброса таймера каждый кадр!)
+		self.animation_timer += dt
+		if self.animation_timer >= self.animation_speed:
+			self.animation_timer = 0
+			self.current_sprite_index = (self.current_sprite_index + 1) % len(self.current_animation)
+
+
+		# Применяем спрайт с учетом направления
+		current_sprite = self.current_animation[self.current_sprite_index]
+		if self.last_direction.x < 0:
+			self.sprite = pygame.transform.flip(current_sprite, True, False)
+		else:
+			self.sprite = current_sprite
+
+		# Обновляем позицию
 		self.position += self.velocity
 		self.rect.x = self.position.x - self.radius
 		self.rect.y = self.position.y - self.radius
-		
+
 		if camera:
 			camera.update(self)
-
