@@ -67,7 +67,7 @@ To run, use the standard methods of running your editor's scripts (run main.py )
 - [x] Add standart classes, keyboard events checker
 - [x] Add player with movement
 - [x] Add enemies with logic
-- [ ] Edit sprites, create anims
+- [x] Edit sprites, create anims
 - [ ] Add battle system
   - [ ] Weapon sprites
   - [ ] HP reduction, regeneration
