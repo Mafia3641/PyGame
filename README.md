@@ -36,7 +36,7 @@ Here are some libraries, modules and sprite templates which I am using:
 - [PyGame](https://www.pygame.org/)
 - [Pandas](https://pandas.pydata.org/docs/)
 - [Numpy](https://numpy.org/doc/)
-- [ich.io](https://itch.io/)
+- [itch.io](https://itch.io/)
 - [sys](https://docs.python.org/3/library/sys.html)
 
 ## Getting Started
