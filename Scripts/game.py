@@ -4,7 +4,8 @@ from utils import load_sprite
 from models import Player
 from constants import WINDOW_WIDTH, WINDOW_HEIGHT, FPS
 from camera import Camera
-from enemy import Monkey
+from enemy import Slime
+
 
 class Game:
     def __init__(self):
@@ -22,6 +23,7 @@ class Game:
 
     def main_loop(self):
         self._spawn_enemy(enemy_type='monkey', position=(450, 350))
+        self._spawn_enemy(enemy_type='Slime', position=(450, 350))
         while True:
             dt = self.clock.tick(FPS) / 1000
             self._handle_events()
@@ -46,9 +48,10 @@ class Game:
             enemy.update(dt)
     
     def _spawn_enemy(self, enemy_type: str, position: tuple):
-        enemy = Monkey(position, target=self.player)
-        self.enemies.append(enemy)
-        print("Enemy created")
+        if enemy_type.lower() == 'slime':
+            enemy = Slime(position, target=self.player)
+            self.enemies.append(enemy)
+            print("Slime created")
     
     def _draw_background(self):
         """
@@ -73,7 +76,8 @@ class Game:
         self._draw_background()
         # Отрисовываем игрока с учетом смещения камеры
         render_objects = [self.player] + self.enemies
-        render_objects.sort(key=lambda obj: obj.rect.centery)
+        render_objects.sort(key=lambda obj: obj.position.y)
+
         
         for obj in render_objects:
             obj.draw(self.screen, self.camera)

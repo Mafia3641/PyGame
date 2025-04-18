@@ -10,22 +10,33 @@ class GameObject:
 		self.radius = sprite.get_width() / 2
 		self.velocity = Vector2(velocity)
 		self.rect = pygame.Rect(
-			self.position.x - self.radius,
-			self.position.y - self.radius,
+			self.position.x - sprite.get_width() / 2,
+			self.position.y - sprite.get_height(),
 			self.sprite.get_width(),
 			self.sprite.get_height()
 		)
 	
 	def draw(self, surface, camera=None):
 		blit_position = self.position - Vector2(self.radius)
+
+		blit_position = Vector2(
+			self.position.x - self.sprite.get_width() / 2,
+			self.position.y - self.sprite.get_height()
+		)
+
 		if camera:
 			blit_position -= Vector2(camera.camera.topleft)
 		surface.blit(self.sprite, blit_position)
 	
 	def move(self):
 		self.position = self.position + self.velocity
+
 		self.rect.x = self.position.x - self.radius
 		self.rect.y = self.position.y - self.radius
+
+		self.rect.x = self.position.x - self.sprite.get_width() / 2
+		self.rect.y = self.position.y - self.sprite.get_height()
+
 	
 	def collides_with(self, other_object):
 		distance = self.position.distance_to(other_object.position)
@@ -38,14 +49,20 @@ class Player(GameObject):
 		self.direction = Vector2(0, 0)
 		self.speed = SPEED
 		self.idle_sprites = [
-			load_sprite('Player_Idle/player_idle_1'),
-			load_sprite('Player_Idle/player_idle_2')
+			load_sprite('Player/Player_Idle/player_idle_1'),
+			load_sprite('Player/Player_Idle/player_idle_2'),
+			load_sprite('Player/Player_Idle/player_idle_3'),
+			load_sprite('Player/Player_Idle/player_idle_4'),
+			load_sprite('Player/Player_Idle/player_idle_5'),
+			load_sprite('Player/Player_Idle/player_idle_6'),
 		]
 		self.move_sprites = [
-			load_sprite('Player_Move/player_move_1'),
-			load_sprite('Player_Move/player_move_2'),
-			load_sprite('Player_Move/player_move_3'),
-			load_sprite('Player_Move/player_move_4')
+			load_sprite('Player/Player_Move/player_move_1'),
+			load_sprite('Player/Player_Move/player_move_2'),
+			load_sprite('Player/Player_Move/player_move_3'),
+			load_sprite('Player/Player_Move/player_move_4'),
+			load_sprite('Player/Player_Move/player_move_5'),
+			load_sprite('Player/Player_Move/player_move_6'),
 		]
 		self.last_direction = Vector2(1, 0)
 		self.current_sprite_index = 0
@@ -98,8 +115,9 @@ class Player(GameObject):
 
 		# Обновляем позицию
 		self.position += self.velocity
-		self.rect.x = self.position.x - self.radius
-		self.rect.y = self.position.y - self.radius
+
+		self.rect.x = self.position.x - self.sprite.get_width() / 2
+		self.rect.y = self.position.y - self.sprite.get_height()
 
 		if camera:
 			camera.update(self)
