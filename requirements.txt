@@ -1,1 +1,1 @@
-# Nothing here for now
+pygame==2.6.1
