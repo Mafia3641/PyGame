@@ -49,10 +49,13 @@ class Enemy(GameObject):
 	и проверять коллизию с игроком.
 	"""
 	
-	def __init__(self, position, sprite, damage=10, speed=100, attack_range=50, target=None):
+	def __init__(self, position, sprite, damage=10, speed=100, hp=100, attack_range=50, target=None):
 		# Инициализируем базовый объект
 		super().__init__(position, sprite, Vector2(0, 0))
 		self.damage = damage
+		self.hp = hp
+		self.alive = True
+		self.should_be_removed = False
 		self.npc_logic = NPCLogic(target, speed, attack_range)
 		
 		self.attack_cooldown = 1.0 # seconds
@@ -68,6 +71,16 @@ class Enemy(GameObject):
 	
 	def attack(self):
 		print("Enemy is attacking! (damage: {})".format(self.damage))
+	
+	def take_damage(self, damage):
+		if self.alive:
+			self.hp -= damage
+			if self.hp <= 0:
+				self.alive = False
+				self.die()
+	
+	def die(self):
+		raise NotImplementedError("Override die() in subclass")
 
 
 class Slime(Enemy):
@@ -78,11 +91,10 @@ class Slime(Enemy):
 	
 	def __init__(self, position, target):
 		# Загружаем спрайт для врага, например используя утилиту load_sprite
-
 		sprite = load_sprite("Enemies/Slime/Slime_idle/slime_idle_1", with_alpha=True)
-		# Инициализируем базовый класс с индивидуальными параметрами для Monkey
-		super().__init__(position, sprite, damage=5, speed=120, attack_range=40, target=target)
-
+		# Инициализируем базовый класс с индивидуальными параметрами для Slime
+		super().__init__(position, sprite, damage=5, speed=120, hp=50, attack_range=30, target=target)
+		
 		self.slime_move_sprites = [
 			load_sprite("Enemies/Slime/Slime_run/slime_move_1"),
 			load_sprite("Enemies/Slime/Slime_run/slime_move_2"),
@@ -103,39 +115,67 @@ class Slime(Enemy):
 		self.previous_animation = self.current_slime_animation
 		self.animation_speed = 0.2
 		self.animation_timer = 0
-		# Инициализируем базовый класс с индивидуальными параметрами для Monkey
-		super().__init__(
-			position,
-			self.slime_move_sprites[0],
-			damage=5,
-			speed=120,
-			attack_range=20,
-			target=target
-		)
+		
+		self.death_sprites = [
+			load_sprite("Enemies/Slime/Slime_die/slime_die_1"),
+			load_sprite("Enemies/Slime/Slime_die/slime_die_2"),
+			load_sprite("Enemies/Slime/Slime_die/slime_die_3"),
+			load_sprite("Enemies/Slime/Slime_die/slime_die_4"),
+			load_sprite("Enemies/Slime/Slime_die/slime_die_5"),
+		]
+		self.dying = False
+		self.death_timer = 0.0
+		self.death_frame_index = 0
+		self.death_frame_duration = 0.2
+		self.time_since_last_frame = 0.0
+		self.removal_delay = 5.0
+		
+	
+	def die(self):
+		self.dying = True
+		self.death_timer = 0.0
+		self.death_frame_index = 0
+		self.sprite = self.death_sprites[0]
 		
 	def update(self, dt):
-		super().update(dt)
-		# === Определяем текущую анимацию на основе движения ===
-		if self.velocity.length_squared() > 0:
-			# Движется
-			self.current_slime_animation = self.slime_move_sprites
-			self.last_direction = self.velocity.normalize()
-		else:
-			# Стоит
-			self.current_slime_animation = self.slime_idle_sprites
-		
-		# === Обновление таймера и кадра анимации ===
-		self.animation_timer += dt
-		if self.animation_timer >= self.animation_speed:
-			self.animation_timer = 0
-			self.current_sprite_index = (self.current_sprite_index + 1) % len(self.current_slime_animation)
-			self.sprite = self.current_slime_animation[self.current_sprite_index]
+		if self.dying:
+			self.death_timer += dt
+			self.time_since_last_frame += dt
 			
-			# Отзеркаливание при движении влево
-			if self.last_direction.x < 0:
-				self.sprite = pygame.transform.flip(self.sprite, True, False)
+			if self.death_frame_index < len(self.death_sprites):
+				if self.time_since_last_frame >= self.death_frame_duration:
+					self.time_since_last_frame = 0
+					self.death_frame_index += 1
+					if self.death_frame_index < len(self.death_sprites):
+						self.sprite = self.death_sprites[self.death_frame_index]
+			
+			if self.death_timer >= self.removal_delay:
+				self.should_be_removed = True
 		
-		# === Обновление позиции спрайта ===
-		self.rect.x = self.position.x - self.sprite.get_width() / 2
-		self.rect.y = self.position.y - self.sprite.get_height()
+		
+		else:
+			super().update(dt)
+			# === Определяем текущую анимацию на основе движения ===
+			if self.velocity.length_squared() > 0:
+				# Движется
+				self.current_slime_animation = self.slime_move_sprites
+				self.last_direction = self.velocity.normalize()
+			else:
+				# Стоит
+				self.current_slime_animation = self.slime_idle_sprites
+			
+			# === Обновление таймера и кадра анимации ===
+			self.animation_timer += dt
+			if self.animation_timer >= self.animation_speed:
+				self.animation_timer = 0
+				self.current_sprite_index = (self.current_sprite_index + 1) % len(self.current_slime_animation)
+				self.sprite = self.current_slime_animation[self.current_sprite_index]
+				
+				# Отзеркаливание при движении влево
+				if self.last_direction.x < 0:
+					self.sprite = pygame.transform.flip(self.sprite, True, False)
+			
+			# === Обновление позиции спрайта ===
+			self.rect.x = self.position.x - self.sprite.get_width() / 2
+			self.rect.y = self.position.y - self.sprite.get_height()
 

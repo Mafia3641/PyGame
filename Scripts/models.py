@@ -1,46 +1,9 @@
 import pygame
 from pygame.math import Vector2
 from utils import load_sprite
-from constants import SPEED
-
-class GameObject:
-	def __init__(self, position: tuple, sprite, velocity: Vector2):
-		self.position = Vector2(position)
-		self.sprite = sprite
-		self.radius = sprite.get_width() / 2
-		self.velocity = Vector2(velocity)
-		self.rect = pygame.Rect(
-			self.position.x - sprite.get_width() / 2,
-			self.position.y - sprite.get_height(),
-			self.sprite.get_width(),
-			self.sprite.get_height()
-		)
-	
-	def draw(self, surface, camera=None):
-		blit_position = self.position - Vector2(self.radius)
-
-		blit_position = Vector2(
-			self.position.x - self.sprite.get_width() / 2,
-			self.position.y - self.sprite.get_height()
-		)
-
-		if camera:
-			blit_position -= Vector2(camera.camera.topleft)
-		surface.blit(self.sprite, blit_position)
-	
-	def move(self):
-		self.position = self.position + self.velocity
-
-		self.rect.x = self.position.x - self.radius
-		self.rect.y = self.position.y - self.radius
-
-		self.rect.x = self.position.x - self.sprite.get_width() / 2
-		self.rect.y = self.position.y - self.sprite.get_height()
-
-	
-	def collides_with(self, other_object):
-		distance = self.position.distance_to(other_object.position)
-		return distance < self.radius + other_object.radius
+from constants import SPEED, BASE_DAMAGE
+from weapon import *
+from game_object import GameObject
 
 
 class Player(GameObject):
@@ -48,6 +11,8 @@ class Player(GameObject):
 	def __init__(self, position: tuple):
 		self.direction = Vector2(0, 0)
 		self.speed = SPEED
+		self.damage = BASE_DAMAGE
+		
 		self.idle_sprites = [
 			load_sprite('Player/Player_Idle/player_idle_1'),
 			load_sprite('Player/Player_Idle/player_idle_2'),
@@ -73,6 +38,48 @@ class Player(GameObject):
 
 		super().__init__(position, self.idle_sprites[0], Vector2(0))
 
+		self.active_weapon = None
+		self.pickup_weapon('starter_sword')
+	
+	def pickup_weapon(self, weapon_name: str):
+		if weapon_name == 'starter_sword':
+			self.active_weapon = MeleeWeapon(
+				owner=self,
+				offset=Vector2(5, -2),
+				idle_sprite_name="Weapons/MeleeWeapons/StarterSword/starter_sword_idle",
+				attack_sprite_names=[f"Weapons/MeleeWeapons/StarterSword/starter_sword_attack{i}" for i in range(1, 5)],
+				damage=10,
+				attack_range=40,
+				cooldown=0.5,
+				repulsion=0.5,
+				frame_duration=0.1
+			)
+		elif weapon_name == 'pistol':
+			self.active_weapon = RangeWeapon(
+				owner=self,
+				offset=Vector2(5, -2),
+				projectile_speed=600,
+				projectile_sprite_name="Weapons/bullet",
+				weapon_ilde_sprite="Weapons/RangeWeapons/Pistol/pistol_idle",
+				damage=8,
+				cooldown=0.3,
+				accuracy=5,
+				repulsion=0.3
+			)
+		elif weapon_name == 'rifle':
+			self.active_weapon = RangeWeapon(
+				owner=self,
+				offset=Vector2(5, -2),
+				projectile_speed=800,
+				projectile_sprite_name="Weapons/rifle_bullet",
+				damage=12,
+				cooldown=0.2,
+				accuracy=2,
+				repulsion=0.1
+			)
+		else:
+			raise ValueError(f"Неизвестное оружие: {weapon_name}")
+	
 	def update(self, camera=None, dt=0):
 		keys = pygame.key.get_pressed()
 		self.direction.x = keys[pygame.K_d] - keys[pygame.K_a]
@@ -118,6 +125,7 @@ class Player(GameObject):
 
 		self.rect.x = self.position.x - self.sprite.get_width() / 2
 		self.rect.y = self.position.y - self.sprite.get_height()
-
+		
 		if camera:
 			camera.update(self)
+		
