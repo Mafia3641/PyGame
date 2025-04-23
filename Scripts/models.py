@@ -32,12 +32,21 @@ class Player(GameObject):
 			load_sprite('Player/Player_Move/player_move_5'),
 			load_sprite('Player/Player_Move/player_move_6'),
 		]
+		self.death_sprites = [
+			load_sprite('Player/Player_Die/player_die_1'),
+			load_sprite('Player/Player_Die/player_die_2'),
+			load_sprite('Player/Player_Die/player_die_3'),
+		]
 		self.last_direction = Vector2(1, 0)
 		self.current_sprite_index = 0
 		self.current_animation = self.idle_sprites
 		self.previous_animation = self.current_animation
 		self.animation_speed = 0.5
 		self.animation_timer = 0
+		self.is_dying = False
+		self.death_frame_index = 0
+		self.death_timer = 0.0
+		self.death_frame_duration = 0.4 # Increased from 0.2 for slower animation
 
 		super().__init__(position, self.idle_sprites[0], Vector2(0))
 
@@ -94,22 +103,60 @@ class Player(GameObject):
 	
 	def take_damage(self, amount):
 		"""Reduces player HP and handles death."""
-		if self.hp > 0: # Only take damage if alive
+		if self.hp > 0 and not self.is_dying: # Only take damage if alive and not already dying
 			self.hp -= amount
 			print(f"Player took {amount} damage, HP left: {self.hp}") # Debug
 			if self.hp <= 0:
 				self.hp = 0 # Prevent negative HP
-				print("Player Died!")
-				# Add game over logic here (e.g., stop game loop, show screen)
+				# --- Trigger Death Sequence --- 
+				print("Player Death Sequence Started!") # Debug
+				self.is_dying = True
+				self.death_frame_index = 0
+				self.death_timer = 0.0
+				# Set initial death sprite immediately
+				if self.death_sprites:
+					self.sprite = self.death_sprites[0]
+					self.rect.size = self.sprite.get_size()
+				# -----------------------------
+				# Remove old game over logic:
+				# print("Player Died!") 
 				# pygame.quit()
 				# sys.exit() 
 
 	def update(self, camera=None, dt=0):
-		# Check if player is dead - if so, maybe skip update?
-		if self.hp <= 0:
-			# Optionally add death animation or logic here
-			return
+		# --- Handle Death Animation First --- 
+		if self.is_dying:
+			self.velocity = Vector2(0, 0) # Stop movement
 			
+			self.death_timer += dt
+			target_frame_index = int(self.death_timer // self.death_frame_duration)
+			current_frame_index = min(target_frame_index, len(self.death_sprites) - 1)
+			
+			# --- DEBUG PRINTS --- 
+			print(f"Death Update: dt={dt:.4f}, timer={self.death_timer:.4f}, target_idx={target_frame_index}, current_idx={current_frame_index}, stored_idx={self.death_frame_index}")
+			# ------------------
+			
+			# Update sprite only if the frame index has changed
+			if current_frame_index != self.death_frame_index:
+				# --- DEBUG PRINT --- 
+				print(f"  >>> Updating death frame index from {self.death_frame_index} to {current_frame_index}")
+				# -------------------
+				self.death_frame_index = current_frame_index
+				self.sprite = self.death_sprites[self.death_frame_index]
+				self.rect.size = self.sprite.get_size() # Update rect size for new sprite
+				
+			# Update rect position (even if stopped)
+			self.rect.center = (int(self.position.x), int(self.position.y))
+			
+			# Add a condition to check if animation cycle is complete (optional)
+			# if target_frame_index >= len(self.death_sprites):
+			#    print("Death animation cycle finished")
+				
+			return # Skip normal update
+		# ----------------------------------
+		
+		# --- Normal Update Logic (if not dying) --- 
+		# Input handling
 		keys = pygame.key.get_pressed()
 		self.direction.x = keys[pygame.K_d] - keys[pygame.K_a]
 		self.direction.y = keys[pygame.K_s] - keys[pygame.K_w]

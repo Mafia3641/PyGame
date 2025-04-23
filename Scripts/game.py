@@ -50,11 +50,22 @@ class Game:
         
         
     def _process_game_logic(self, dt):
+        # Update player FIRST, so death animation can run
         self.player.update(self.camera, dt)
-        self.enemies = [enemy for enemy in self.enemies if not enemy.should_be_removed]
+        
+        # --- Stop OTHER updates if player is dying --- 
+        if self.player.is_dying:
+            return # Skip enemy/weapon updates
+        # -------------------------------------------
+        
+        # Enemy cleanup
+        self.enemies = [enemy for enemy in self.enemies if not enemy.should_be_removed] 
+        # Enemy updates
         for enemy in self.enemies:
-            enemy.update(dt)
-        self.player.active_weapon.update(dt, self.enemies)
+            enemy.update(dt) 
+        # Weapon update (if weapon exists)
+        if self.player.active_weapon:
+            self.player.active_weapon.update(dt, self.enemies)
     
     def _spawn_enemy(self, enemy_type: str, position: tuple):
         if enemy_type.lower() == 'slime':
@@ -120,25 +131,31 @@ class Game:
                 self.screen.blit(self.scaled_background, (int(screen_x), int(screen_y)))
 
     def _draw(self):
-        # Отрисовываем фон каждый кадр: всего 9 тайлов, что даст эффект бесконечного мира,
-        # при этом игрок всегда оказывается по центру экрана.
         self._draw_background()
-        # Отрисовываем игрока с учетом смещения камеры
-        render_objects = [self.player] + self.enemies
-        if isinstance(self.player.active_weapon, RangeWeapon):
-            render_objects += self.player.active_weapon.projectiles
-        render_objects.sort(key=lambda obj: obj.position.y)
         
+        # --- Determine objects to render --- 
+        if self.player.is_dying:
+            # Only render the player during death animation
+            render_objects = [self.player]
+        else:
+            # Normal rendering: player, enemies, projectiles
+            render_objects = [self.player] + self.enemies
+            if isinstance(self.player.active_weapon, RangeWeapon):
+                render_objects += self.player.active_weapon.projectiles
+            render_objects.sort(key=lambda obj: obj.position.y)
+        # -----------------------------------
+        
+        # Draw the determined objects
         for obj in render_objects:
-            # Draw object and its potential health bar (handled in GameObject.draw)
             obj.draw(self.screen, self.camera)
         
-        # Draw weapon separately (also handles its own health bar if it had one)
-        self.player.active_weapon.draw(self.screen, self.camera)
+        # --- Draw weapon only if player is not dying --- 
+        if not self.player.is_dying and self.player.active_weapon:
+            self.player.active_weapon.draw(self.screen, self.camera)
+        # ---------------------------------------------
         
-        # --- Draw Player HUD (Health Bar) --- 
+        # Draw HUD (health bar) always
         self._draw_player_hud()
-        # -----------------------------------
         
         pygame.display.update()
 
