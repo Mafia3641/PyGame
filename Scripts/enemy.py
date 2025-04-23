@@ -18,26 +18,59 @@ class NPCLogic:
 		self.attack_range = attack_range  # дистанция для атаки (пикселей)
 	
 	def update(self, enemy, dt):
-		# Центры врага и игрока (self.target)
+		# --- Stun & Recovery Checks (Return if active) --- 
+		if enemy.stun_timer > 0:
+			enemy.stun_timer -= dt
+			return 
+		if enemy.knockback_recovery_timer > 0:
+			enemy.knockback_recovery_timer -= dt
+			# Apply reduced speed movement logic (as before)
+			target_center = self.target.position 
+			enemy_center = enemy.position
+			direction = target_center - enemy_center
+			distance = direction.length()
+			if distance < 0.5 * self.attack_range: 
+				enemy.velocity = Vector2(0, 0)
+				return
+			if distance != 0:
+				direction.normalize_ip()
+			enemy.velocity = direction 
+			enemy.position += direction * (self.speed * 0.5) * dt
+			enemy.rect.center = (int(enemy.position.x), int(enemy.position.y))
+			return 
+		# -----------------------------------------------
+
+		# --- Normal AI Logic --- 
 		target_center = self.target.position
 		enemy_center = enemy.position
-		
-		# Вектор к игроку
 		direction = target_center - enemy_center
 		distance = direction.length()
 		
-		# Если враг слишком близко — не двигается и атакует
-		if distance < 0.5 * self.attack_range:
-			enemy.velocity = Vector2(0, 0)
-			enemy.attack()  # Атака, если на расстоянии ближе порога
-			return
+		# 1. Check: Waiting during cooldown while player is in range?
+		if enemy.attack_cooldown_timer > 0 and distance < self.attack_range:
+			enemy.velocity = Vector2(0, 0) # Stay put
+			# Don't return yet, let Enemy.update decrement the timer
+			# Update rect based on stopped position
+			enemy.rect.center = (int(enemy.position.x), int(enemy.position.y))
+			return # Skip attack/move checks
+			
+		# 2. Check: Initiate Attack (very close and cooldown ready)?
+		if distance < (0.5 * self.attack_range) and enemy.attack_cooldown_timer <= 0 and not enemy.is_attacking:
+			enemy.attack()  # Start wind-up (handled in Enemy/Slime update)
+			enemy.velocity = Vector2(0, 0) # Stop moving now
+			# Update rect based on stopped position
+			enemy.rect.center = (int(enemy.position.x), int(enemy.position.y))
+			return # Let wind-up logic take over
 		
-		# Нормализуем вектор и двигаемся к игроку
-		if distance != 0:
+		# 3. Action: Move towards player (if not waiting or attacking)
+		if distance != 0: # Avoid normalization of zero vector
 			direction.normalize_ip()
+			enemy.velocity = direction
+			enemy.position += direction * self.speed * dt
+		else:
+			enemy.velocity = Vector2(0, 0) # Already at target (or decided not to move)
 
-		enemy.velocity = direction
-		enemy.position += direction * self.speed * dt
+		# Update rect based on final position for this frame
 		enemy.rect.center = (int(enemy.position.x), int(enemy.position.y))
 
 
@@ -54,23 +87,77 @@ class Enemy(GameObject):
 		super().__init__(position, sprite, Vector2(0, 0))
 		self.damage = damage
 		self.hp = hp
+		self.max_hp = hp # Store max HP
 		self.alive = True
 		self.should_be_removed = False
 		self.npc_logic = NPCLogic(target, speed, attack_range)
 		
-		self.attack_cooldown = 1.0 # seconds
-		self.attack_anim_duration = 0.5
+		self.attack_cooldown = 1.0 # Duration of cooldown
+		self.attack_anim_duration = 0.5 # Duration of wind-up animation
+		
+		# State variables
+		self.attack_cooldown_timer = 2.0 # Start with initial delay
+		self.attack_windup_timer = 0.0
+		self.is_attacking = False # Tracks wind-up phase
+		
+		self.stun_timer = 0.0 
+		self.knockback_recovery_timer = 0.0
+		self.knockback_velocity = Vector2(0, 0)
+		self.knockback_timer = 0.0
 		
 	
 	def update(self, dt):
-		"""
-		Обновление врага – вызываем логику NPC, если цель (игрок) задана.
-		"""
+		# --- Knockback Check (Return if active) --- 
+		if self.knockback_timer > 0:
+			self.position += self.knockback_velocity * dt
+			self.rect.center = (int(self.position.x), int(self.position.y))
+			self.knockback_timer -= dt
+			if self.knockback_timer <= 0:
+				self.knockback_velocity = Vector2(0, 0)
+			return # Skip other updates while being knocked back
+		# -----------------------
+		
+		# --- Attack Wind-up Logic (Return if active) --- 
+		if self.is_attacking:
+			self.velocity = Vector2(0, 0) # Stop moving during wind-up
+			self.attack_windup_timer -= dt
+			# Add logic here to switch to attack animation if needed
+			
+			if self.attack_windup_timer <= 0:
+				# Wind-up finished, try to deal damage
+				self.is_attacking = False # End attack state
+				if self.npc_logic and self.npc_logic.target:
+					target_pos = self.npc_logic.target.position
+					if self.position.distance_to(target_pos) < self.npc_logic.attack_range:
+						print(f"Enemy dealt {self.damage} damage to player!") # Debug
+						self.npc_logic.target.take_damage(self.damage)
+						
+				# Start cooldown regardless of hitting
+				self.attack_cooldown_timer = self.attack_cooldown
+			# Update rect based on potentially stopped position
+			self.rect.center = (int(self.position.x), int(self.position.y))
+			return # Finished attack logic for this frame
+		# -------------------------
+		
+		# --- Normal Update (if not knockback/attacking) --- 
+		# Decrement attack cooldown timer *first*
+		if self.attack_cooldown_timer > 0:
+			self.attack_cooldown_timer -= dt
+			
+		# Run standard NPC logic (handles movement, stun/recovery checks, triggering attack)
 		if self.npc_logic and self.npc_logic.target:
 			self.npc_logic.update(self, dt)
-	
+			
+		# Update rect based on position potentially changed by NPCLogic
+		self.rect.center = (int(self.position.x), int(self.position.y))
+
 	def attack(self):
-		print("Enemy is attacking! (damage: {})".format(self.damage))
+		# Called by NPCLogic when in range and cooldown ready
+		if not self.is_attacking: # Should always be true if called by NPCLogic due to cooldown check
+			print("Enemy starts attack wind-up!") # Debug
+			self.is_attacking = True
+			self.attack_windup_timer = self.attack_anim_duration
+			# Animation switching logic can be added here or in update based on is_attacking
 	
 	def take_damage(self, damage):
 		if self.alive:
@@ -138,6 +225,20 @@ class Slime(Enemy):
 		self.sprite = self.death_sprites[0]
 		
 	def update(self, dt):
+		# --- Knockback Check (Return if active) --- 
+		if self.knockback_timer > 0:
+			self.position += self.knockback_velocity * dt
+			self.rect.center = (int(self.position.x), int(self.position.y))
+			self.knockback_timer -= dt
+			if self.knockback_timer <= 0:
+				self.knockback_velocity = Vector2(0, 0)
+			# Force idle animation during knockback? 
+			# self.sprite = self.slime_idle_sprites[0] 
+			# self.rect.size = self.sprite.get_size()
+			return
+		# -----------------------
+		
+		# --- Dying Check (Return if active) --- 
 		if self.dying:
 			self.death_timer += dt
 			self.time_since_last_frame += dt
@@ -151,31 +252,75 @@ class Slime(Enemy):
 			
 			if self.death_timer >= self.removal_delay:
 				self.should_be_removed = True
+			return # Skip normal logic if dying
 		
-		
-		else:
-			super().update(dt)
-			# === Определяем текущую анимацию на основе движения ===
-			if self.velocity.length_squared() > 0:
-				# Движется
-				self.current_slime_animation = self.slime_move_sprites
-				self.last_direction = self.velocity.normalize()
-			else:
-				# Стоит
-				self.current_slime_animation = self.slime_idle_sprites
-			
-			# === Обновление таймера и кадра анимации ===
-			self.animation_timer += dt
-			if self.animation_timer >= self.animation_speed:
+		# --- Attack Wind-up Logic (Return if active) --- 
+		if self.is_attacking:
+			self.velocity = Vector2(0, 0) # Stop moving
+			self.attack_windup_timer -= dt
+			# Set attack animation
+			# Assuming attack animation exists and mirrors wind-up duration
+			# This part needs specific slime attack sprites
+			# self.current_slime_animation = self.slime_attack_sprites 
+			self.current_slime_animation = self.slime_idle_sprites # Placeholder: use idle during windup
+			self.animation_timer += dt # Still animate during windup
+			if self.animation_timer >= self.animation_speed: # Use normal anim speed
 				self.animation_timer = 0
 				self.current_sprite_index = (self.current_sprite_index + 1) % len(self.current_slime_animation)
 				self.sprite = self.current_slime_animation[self.current_sprite_index]
-				
-				# Отзеркаливание при движении влево
+				# Flip if needed
 				if self.last_direction.x < 0:
 					self.sprite = pygame.transform.flip(self.sprite, True, False)
+				self.rect.size = self.sprite.get_size()
 			
-			# === Обновление позиции спрайта ===
-			self.rect.x = self.position.x - self.sprite.get_width() / 2
-			self.rect.y = self.position.y - self.sprite.get_height()
+			if self.attack_windup_timer <= 0:
+				# Wind-up finished, try to deal damage
+				self.is_attacking = False
+				if self.npc_logic and self.npc_logic.target:
+					target_pos = self.npc_logic.target.position
+					if self.position.distance_to(target_pos) < self.npc_logic.attack_range:
+						print(f"Slime dealt {self.damage} damage to player!") # Debug
+						self.npc_logic.target.take_damage(self.damage)
+				# Start cooldown
+				self.attack_cooldown_timer = self.attack_cooldown
+			# Update rect based on potentially stopped position
+			self.rect.center = (int(self.position.x), int(self.position.y))
+			return # Finished attack logic for this frame
+				
+			# Ensure rect is updated even if windup continues
+			self.rect.center = (int(self.position.x), int(self.position.y))
+			return # Still winding up
+		# -------------------------
+		
+		# --- Normal Slime Update (if not knockback/dying/attacking) --- 
+		# Decrement attack cooldown timer *first*
+		if self.attack_cooldown_timer > 0:
+			self.attack_cooldown_timer -= dt
+			
+		# Run NPC logic (handles movement/waiting/attack initiation)
+		if self.npc_logic and self.npc_logic.target:
+			self.npc_logic.update(self, dt)
+			
+		# === Animation logic based on velocity from NPCLogic ===
+		if self.velocity.length_squared() > 0:
+			self.current_slime_animation = self.slime_move_sprites
+			self.last_direction = self.velocity.normalize()
+		else:
+			self.current_slime_animation = self.slime_idle_sprites
+			
+		# Update animation frame
+		self.animation_timer += dt
+		if self.animation_timer >= self.animation_speed:
+			self.animation_timer = 0
+			self.current_sprite_index = (self.current_sprite_index + 1) % len(self.current_slime_animation)
+			self.sprite = self.current_slime_animation[self.current_sprite_index]
+			# Flip if needed
+			if self.last_direction.x < 0:
+				self.sprite = pygame.transform.flip(self.sprite, True, False)
+			# Update rect size
+			self.rect.width = self.sprite.get_width()
+			self.rect.height = self.sprite.get_height()
+			
+		# === Update rect position based on final position ===
+		self.rect.center = (int(self.position.x), int(self.position.y))
 

@@ -2,8 +2,9 @@ import pygame
 from pygame.math import Vector2
 from utils import load_sprite
 from constants import SPEED, BASE_DAMAGE
-from weapon import *
+from weapon import MeleeWeapon, RangeWeapon
 from game_object import GameObject
+from weapon_stats import WEAPON_STATS
 
 
 class Player(GameObject):
@@ -12,6 +13,8 @@ class Player(GameObject):
 		self.direction = Vector2(0, 0)
 		self.speed = SPEED
 		self.damage = BASE_DAMAGE
+		self.max_hp = 100 # Add max HP
+		self.hp = self.max_hp # Start with full HP
 		
 		self.idle_sprites = [
 			load_sprite('Player/Player_Idle/player_idle_1'),
@@ -42,45 +45,71 @@ class Player(GameObject):
 		self.pickup_weapon('starter_sword')
 	
 	def pickup_weapon(self, weapon_name: str):
-		if weapon_name == 'starter_sword':
-			self.active_weapon = MeleeWeapon(
-				owner=self,
-				offset=Vector2(5, -2),
-				idle_sprite_name="Weapons/MeleeWeapons/StarterSword/starter_sword_idle",
-				attack_sprite_names=[f"Weapons/MeleeWeapons/StarterSword/starter_sword_attack{i}" for i in range(1, 5)],
-				damage=10,
-				attack_range=40,
-				cooldown=0.5,
-				repulsion=0.5,
-				frame_duration=0.1
-			)
-		elif weapon_name == 'pistol':
-			self.active_weapon = RangeWeapon(
-				owner=self,
-				offset=Vector2(5, -2),
-				projectile_speed=600,
-				projectile_sprite_name="Weapons/bullet",
-				weapon_ilde_sprite="Weapons/RangeWeapons/Pistol/pistol_idle",
-				damage=8,
-				cooldown=0.3,
-				accuracy=5,
-				repulsion=0.3
-			)
-		elif weapon_name == 'rifle':
-			self.active_weapon = RangeWeapon(
-				owner=self,
-				offset=Vector2(5, -2),
-				projectile_speed=800,
-				projectile_sprite_name="Weapons/rifle_bullet",
-				damage=12,
-				cooldown=0.2,
-				accuracy=2,
-				repulsion=0.1
-			)
+		if weapon_name not in WEAPON_STATS:
+			raise ValueError(f"Unknown weapon requested: {weapon_name}")
+
+		stats = WEAPON_STATS[weapon_name]
+		weapon_type = stats.get('type')
+		
+		# Common args for both types
+		common_args = {
+			'owner': self,
+			'offset': Vector2(stats['offset']) # Convert list to Vector2
+		}
+
+		if weapon_type == 'melee':
+			# Generate attack sprite list from pattern
+			attack_sprites = [
+				stats['attack_sprite_pattern'].format(i) 
+				for i in range(1, stats['attack_sprite_count'] + 1)
+			]
+			
+			# Specific args for MeleeWeapon
+			melee_args = {
+				'idle_sprite_name': stats['idle_sprite_name'],
+				'attack_sprite_names': attack_sprites,
+				'damage': stats['damage'],
+				'attack_range': stats['attack_range'],
+				'cooldown': stats['cooldown'],
+				'repulsion': stats['repulsion'],
+				'frame_duration': stats['frame_duration']
+			}
+			self.active_weapon = MeleeWeapon(**common_args, **melee_args)
+			
+		elif weapon_type == 'range':
+			# Specific args for RangeWeapon
+			range_args = {
+			    'weapon_idle_sprite': stats['weapon_idle_sprite'], # Key corrected in stats file
+				'projectile_speed': stats['projectile_speed'],
+				'projectile_sprite_name': stats['projectile_sprite_name'],
+				'damage': stats['damage'],
+				'cooldown': stats['cooldown'],
+				'accuracy': stats['accuracy'],
+				'repulsion': stats['repulsion']
+			}
+			self.active_weapon = RangeWeapon(**common_args, **range_args)
+			
 		else:
-			raise ValueError(f"Неизвестное оружие: {weapon_name}")
+			raise ValueError(f"Unknown weapon type '{weapon_type}' in stats for {weapon_name}")
 	
+	def take_damage(self, amount):
+		"""Reduces player HP and handles death."""
+		if self.hp > 0: # Only take damage if alive
+			self.hp -= amount
+			print(f"Player took {amount} damage, HP left: {self.hp}") # Debug
+			if self.hp <= 0:
+				self.hp = 0 # Prevent negative HP
+				print("Player Died!")
+				# Add game over logic here (e.g., stop game loop, show screen)
+				# pygame.quit()
+				# sys.exit() 
+
 	def update(self, camera=None, dt=0):
+		# Check if player is dead - if so, maybe skip update?
+		if self.hp <= 0:
+			# Optionally add death animation or logic here
+			return
+			
 		keys = pygame.key.get_pressed()
 		self.direction.x = keys[pygame.K_d] - keys[pygame.K_a]
 		self.direction.y = keys[pygame.K_s] - keys[pygame.K_w]
