@@ -185,7 +185,7 @@ class Player(GameObject):
 		else:
 			self.current_animation = self.idle_sprites
 			self.animation_speed = 0.5  # Медленная анимация при покое
-			self.velocity *= 0.8 # Apply friction/damping
+			self.velocity *= 0.6 # Apply friction/damping
 			if self.velocity.length_squared() < 1: # Stop if velocity is very small
 				self.velocity = Vector2(0, 0)
 
