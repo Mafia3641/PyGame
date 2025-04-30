@@ -68,7 +68,10 @@ To run, use the standard methods of running your editor's scripts (run main.py )
 - [x] Add player with movement
 - [x] Add enemies with logic
 - [x] Edit sprites, create anims
+- [x] Add zoom functionality
 - [ ] Add battle system
+  - [x] Add weapon stats
+  - [x] Add enemy repulsion
   - [ ] Weapon sprites
   - [ ] HP reduction, regeneration
   - [ ] Attack sprites

@@ -1,4 +1,5 @@
 import pygame
+from pygame.math import Vector2 # Import Vector2
 
 
 class Camera:
@@ -31,3 +32,15 @@ class Camera:
 		self.camera.y = y
 		# The camera rect's width/height are not strictly needed for the current apply logic,
 		# so we leave them representing the screen dimensions for now.
+
+	def screen_to_world(self, screen_pos):
+		"""Converts screen coordinates (e.g., mouse position) to world coordinates."""
+		# Get screen position as a Vector2
+		screen_vec = Vector2(screen_pos)
+		# Reverse the zoom scaling
+		world_offset_x = screen_vec.x / self.zoom
+		world_offset_y = screen_vec.y / self.zoom
+		# Add the camera's world position (top-left)
+		world_x = self.camera.x + world_offset_x
+		world_y = self.camera.y + world_offset_y
+		return Vector2(world_x, world_y)

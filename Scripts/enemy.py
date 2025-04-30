@@ -1,7 +1,7 @@
 import pygame
 from pygame.math import Vector2
 import math
-from models import GameObject
+from game_object import GameObject
 from utils import load_sprite
 
 

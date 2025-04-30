@@ -8,13 +8,14 @@ WEAPON_STATS = {
         'type': 'melee',
         'offset': [5, 2], 
         'idle_sprite_name': "Weapons/MeleeWeapons/StarterSword/starter_sword_idle",
-        'attack_sprite_pattern': "Weapons/MeleeWeapons/StarterSword/starter_sword_attack{}",
-        'attack_sprite_count': 4, # Number of attack frames (1 to 4)
+        'attack_sprite_pattern': "Weapons/MeleeWeapons/StarterSword/starter_sword_attack_{}",
+        'attack_sprite_count': 6, # Number of attack frames (1 to 6)
         'damage': 10,
         'attack_range': 40,
         'cooldown': 0.5,
         'repulsion': 1.0, 
-        'frame_duration': 0.1
+        'frame_duration': 0.1,
+        'attack_arc': 90
     },
     'pistol': {
         'type': 'range',
