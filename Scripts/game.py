@@ -63,8 +63,8 @@ class Game:
         # self._spawn_initial_entities()
 
         # --- Wave Announcement State ---
-        self.current_wave = 1
-        self.is_showing_wave_intro = True
+        self.current_wave = 0 # Start at wave 0 for initial upgrade
+        self.is_showing_wave_intro = False # Wave intro starts after first upgrade
         self.wave_intro_timer = 0.0
         self.wave_intro_stage = 'fade_in' # Stages: 'fade_in', 'hold', 'fade_out'
         self.wave_font = None # Cache font object
@@ -79,11 +79,15 @@ class Game:
         # -----------------------
 
         # --- Upgrade State ---
-        self.is_showing_upgrades = False
+        self.is_showing_upgrades = True # Show upgrades immediately
         self.available_upgrade_boxes = [] # List of UpgradeBox instances
         # Load all possible upgrade names once
         self.all_upgrade_names = get_all_upgrade_names() 
         # ---------------------
+        
+        # --- Show Initial Upgrades --- #
+        self._show_upgrade_selection()
+        # -----------------------------
 
     def _setup_pause_button(self):
         try:

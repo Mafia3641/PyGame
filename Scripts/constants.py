@@ -49,7 +49,7 @@ NEW_GAME_BUTTON_DELAY = 5.0 # Seconds after death before button appears
 ACTION_NEW_GAME = 'new_game' # Action string for controller
 
 # --- Upgrade UI Constants ---
-UPGRADE_CARD_SIZE = (250, 400)
+UPGRADE_CARD_SIZE = (250, 750)
 UPGRADE_CARD_Y_POS = 150 # Vertical position on screen
 UPGRADE_CARD_SPACING = 50 # Horizontal space between cards
 
