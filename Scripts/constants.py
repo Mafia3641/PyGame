@@ -54,4 +54,11 @@ UPGRADE_CARD_Y_POS = 150 # Vertical position on screen
 UPGRADE_CARD_SPACING = 50 # Horizontal space between cards
 
 # --- Player Base Stats ---
+BASE_PLAYER_HP = 100
 BASE_MAX_MANA = 50
+
+# --- HUD Bar Constants ---
+BASE_HP_BAR_WIDTH = 200
+BASE_MANA_BAR_WIDTH = 180
+MAX_HP_BAR_WIDTH = 400  # Max visual width for the HP bar
+MAX_MANA_BAR_WIDTH = 360 # Max visual width for the Mana bar

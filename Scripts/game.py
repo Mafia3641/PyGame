@@ -4,14 +4,20 @@ import os
 import random # Import random for upgrade selection
 from utils import load_sprite
 from player import Player
-from constants import (WINDOW_WIDTH, WINDOW_HEIGHT, FPS, 
-                     WAVE_INTRO_FADE_DURATION, WAVE_INTRO_HOLD_DURATION, 
-                     WAVE_INTRO_MAX_FONT_SIZE, WAVE_INTRO_MIN_FONT_SIZE,
-                     WAVE_INSCRIPTION_POSITION, SLIME_MAX_LEVEL,
-                     GAME_OVER_ANIM_DURATION, GAME_OVER_MAX_FONT_SIZE,
-                     GAME_OVER_MIN_FONT_SIZE, GAME_OVER_START_ALPHA, GAME_OVER_END_ALPHA,
-                     NEW_GAME_BUTTON_DELAY, ACTION_NEW_GAME,
-                     UPGRADE_CARD_SIZE, UPGRADE_CARD_Y_POS, UPGRADE_CARD_SPACING) # Import Upgrade UI constants
+from constants import (
+    WINDOW_WIDTH, WINDOW_HEIGHT, FPS, 
+    WAVE_INTRO_FADE_DURATION, WAVE_INTRO_HOLD_DURATION, 
+    WAVE_INTRO_MAX_FONT_SIZE, WAVE_INTRO_MIN_FONT_SIZE,
+    WAVE_INSCRIPTION_POSITION, SLIME_MAX_LEVEL,
+    GAME_OVER_ANIM_DURATION, GAME_OVER_MAX_FONT_SIZE,
+    GAME_OVER_MIN_FONT_SIZE, GAME_OVER_START_ALPHA, GAME_OVER_END_ALPHA,
+    NEW_GAME_BUTTON_DELAY, ACTION_NEW_GAME,
+    UPGRADE_CARD_SIZE, UPGRADE_CARD_Y_POS, UPGRADE_CARD_SPACING, 
+    # Import new HUD constants
+    BASE_PLAYER_HP, BASE_MAX_MANA, 
+    BASE_HP_BAR_WIDTH, BASE_MANA_BAR_WIDTH, 
+    MAX_HP_BAR_WIDTH, MAX_MANA_BAR_WIDTH
+) # Import Upgrade UI constants
 from camera import Camera
 from enemy import Slime
 from weapon import RangeWeapon, MeleeWeapon, Projectile
@@ -19,6 +25,8 @@ from UI.button import Button # Import Button
 from Scripts.spawner import Spawner # Import Spawner
 # Import Upgrade related modules
 from UI.upgrade_box import UpgradeBox 
+# Import state constants from controller
+from Scripts.game_states import STATE_EXIT # Import from new file
 from Scripts.upgrades_list import get_upgrade_data, get_all_upgrade_names, UPGRADES
 
 # Simple GameState container (can be expanded)
@@ -151,6 +159,8 @@ class Game:
 
     def _setup_pause_overlay_elements(self):
         """Pre-render elements needed for the pause overlay."""
+        self.exit_button = None # Initialize exit button
+        
         # Font Loading
         try:
             self.pause_font = pygame.font.Font(None, 74) # Use default font, size 74
@@ -179,6 +189,33 @@ class Game:
             button_x = self.paused_text_rect.centerx - button_rect.width // 2
             button_y = self.paused_text_rect.bottom + 20 # 20px padding below text
             self.resume_button.rect.topleft = (button_x, button_y)
+        # ---------------------------- #
+
+        # --- Setup Exit Button --- #
+        try:
+            exit_unpressed_path = "UI/ui_sprites/close_button_unpressed.png"
+            exit_pressed_path = "UI/ui_sprites/close_button_pressed.png"
+
+            self.exit_button = Button(
+                0, 0, # Placeholder position
+                exit_unpressed_path,
+                exit_pressed_path,
+                callback=self._request_exit, # Use the new callback
+                scale=2.0 # Scale the button by 2x
+            )
+
+            # Position bottom-right
+            screen_rect = pygame.display.get_surface().get_rect()
+            button_rect = self.exit_button.rect
+            padding = 20
+            button_x = screen_rect.width - button_rect.width - padding
+            button_y = screen_rect.height - button_rect.height - padding
+            self.exit_button.rect.topleft = (button_x, button_y)
+
+        except pygame.error as e:
+            print(f"Error loading exit button sprite: {e}")
+        except FileNotFoundError:
+            print(f"Error: Exit button sprite not found")
         # ---------------------------- #
 
     # Remove initial entity spawning, handled by Spawner now
@@ -303,6 +340,24 @@ class Game:
                         
             # If the resume button handled the event, skip further processing
             if event_consumed_by_resume_button:
+                continue
+
+            # 2.6 Handle Exit button click specifically WHEN PAUSED
+            event_consumed_by_exit_button = False
+            if self.is_paused and self.exit_button:
+                mouse_over_exit_button = False
+                if event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION):
+                     mouse_over_exit_button = self.exit_button.rect.collidepoint(event.pos)
+                
+                if mouse_over_exit_button or (event.type == pygame.MOUSEBUTTONUP and self.exit_button.is_pressed):
+                    action = self.exit_button.handle_event(event)
+                    if action is not None: # Callback triggered (_request_exit returned STATE_EXIT)
+                        return action # Return the exit action immediately to the controller
+                    elif event.type == pygame.MOUSEBUTTONDOWN and mouse_over_exit_button:
+                        event_consumed_by_exit_button = True # Consume the click
+                        
+            # If the exit button handled the event (but didn't return an action), skip further processing
+            if event_consumed_by_exit_button:
                 continue
 
             # 3. Handle other game events only if NOT paused
@@ -507,27 +562,36 @@ class Game:
         # print(f"Applying stats: {stats_to_apply}") # Debug
         
         for stat_name, value in stats_to_apply.items():
-            if hasattr(self.player, stat_name):
-                current_value = getattr(self.player, stat_name)
-                # Basic handling for multipliers vs flat values
+            # Determine the base attribute name (remove _mult suffix if present)
+            base_stat_name = stat_name.replace('_mult', '')
+
+            # Handle player attributes (HP, Mana, Speed, Damage, XP Multiplier etc.)
+            if hasattr(self.player, base_stat_name):
+                current_value = getattr(self.player, base_stat_name)
+                
                 if "mult" in stat_name:
-                    # Handle potential mana multiplier
                     new_value = current_value * value
-                    setattr(self.player, stat_name.replace('_mult', ''), new_value)
-                    # print(f"  Applied {stat_name}: {current_value} -> {new_value}")
-                    # Special case: If max_mana increased via multiplier, restore current mana
-                    if 'max_mana' in stat_name:
-                        self.player.current_mana = self.player.max_mana
-                else:
+                    # print(f"  Applying mult {stat_name}: {current_value} -> {new_value}")
+                elif stat_name == 'xp_multiplier': # Handle XP multiplier specifically
+                    # Assuming xp_multiplier modifies the base value itself
+                    new_value = current_value * (1 + value) # Example: current=1, value=0.1 -> new=1.1
+                    # print(f"  Applying {stat_name}: {current_value} -> {new_value}")
+                else: # Assume additive if not multiplier
                     new_value = current_value + value
-                    setattr(self.player, stat_name, new_value)
-                    # print(f"  Applied {stat_name}: {current_value} -> {new_value}")
-                    # Special case: If max_hp or max_mana increased flat, restore current
-                    if stat_name == 'max_hp':
-                        self.player.hp = self.player.max_hp 
-                    elif stat_name == 'max_mana':
-                         self.player.current_mana = self.player.max_mana
-            elif stat_name == 'attack_cooldown_mult': # Special case for weapon stats
+                    # print(f"  Applying add {stat_name}: {current_value} -> {new_value}")
+                    
+                setattr(self.player, base_stat_name, new_value)
+
+                # --- Special Cases AFTER applying the stat change ---
+                # Restore current HP/Mana if max increased
+                if base_stat_name == 'max_hp':
+                    self.player.hp = self.player.max_hp
+                elif base_stat_name == 'max_mana':
+                    self.player.current_mana = self.player.max_mana
+                # ----------------------------------------------------
+                    
+            # Handle weapon-specific stats
+            elif stat_name == 'attack_cooldown_mult':
                  if self.player.active_weapon and 'cooldown' in self.player.active_weapon.stats:
                      current_cooldown = self.player.active_weapon.stats['cooldown']
                      self.player.active_weapon.stats['cooldown'] *= value
@@ -535,8 +599,10 @@ class Game:
                  else:
                     # print(f"  Warning: Player weapon or cooldown stat not found for {stat_name}")
                     pass
+            
+            # Handle other potential stats or log unknown ones
             else:
-                # print(f"  Warning: Player attribute '{stat_name}' not found.")
+                # print(f"  Warning: Player/Weapon attribute '{stat_name}' (base: '{base_stat_name}') not found or handled.")
                 pass
                 
     def _start_next_wave_intro(self):
@@ -546,6 +612,10 @@ class Game:
         self.is_showing_wave_intro = True
         self.wave_intro_timer = 0.0
         self.wave_intro_stage = 'fade_in'
+    
+    def _request_exit(self):
+        """Signals the controller to exit the game."""
+        return STATE_EXIT # Defined in controller.py
     
     # Renamed _draw to draw, takes surface
     def draw(self, surface):
@@ -687,20 +757,24 @@ class Game:
         screen_width = surface.get_width()
         
         # --- Health Bar (Top-Left) --- #
-        HP_BAR_WIDTH = 200
         HP_BAR_HEIGHT = 20
         HP_BAR_X = 10
         HP_BAR_Y = 10
         
         if self.player.max_hp > 0: # Avoid division by zero
+            # Calculate dynamic width based on max HP, capped
+            hp_ratio_to_base = self.player.max_hp / BASE_PLAYER_HP
+            target_hp_width = BASE_HP_BAR_WIDTH * hp_ratio_to_base
+            current_hp_bar_width = min(target_hp_width, MAX_HP_BAR_WIDTH)
+
             hp_ratio = max(0, self.player.hp / self.player.max_hp)
             
             hp_bg_color = (128, 0, 0) # Dark Red
             hp_fg_color = (0, 200, 0) # Green
             hp_border_color = (255, 255, 255) # White border
             
-            hp_bg_rect = pygame.Rect(HP_BAR_X, HP_BAR_Y, HP_BAR_WIDTH, HP_BAR_HEIGHT)
-            hp_fg_rect_width = int(HP_BAR_WIDTH * hp_ratio)
+            hp_bg_rect = pygame.Rect(HP_BAR_X, HP_BAR_Y, int(current_hp_bar_width), HP_BAR_HEIGHT)
+            hp_fg_rect_width = int(current_hp_bar_width * hp_ratio)
             hp_fg_rect = pygame.Rect(HP_BAR_X, HP_BAR_Y, hp_fg_rect_width, HP_BAR_HEIGHT)
             
             pygame.draw.rect(surface, hp_bg_color, hp_bg_rect)
@@ -709,20 +783,24 @@ class Game:
         # ------------------------------ #
 
         # --- Mana Bar (Below HP Bar) --- #
-        MANA_BAR_WIDTH = 180 # Slightly shorter than HP
         MANA_BAR_HEIGHT = 15 # Slightly thinner
         MANA_BAR_X = HP_BAR_X # Align with HP bar horizontally
         MANA_BAR_Y = HP_BAR_Y + HP_BAR_HEIGHT + 5 # Place below HP bar with padding
         
         if self.player.max_mana > 0: # Avoid division by zero
+            # Calculate dynamic width based on max Mana, capped
+            mana_ratio_to_base = self.player.max_mana / BASE_MAX_MANA
+            target_mana_width = BASE_MANA_BAR_WIDTH * mana_ratio_to_base
+            current_mana_bar_width = min(target_mana_width, MAX_MANA_BAR_WIDTH)
+
             mana_ratio = max(0, self.player.current_mana / self.player.max_mana)
             
             mana_bg_color = (0, 0, 100) # Dark Blue
             mana_fg_color = (0, 100, 255) # Bright Blue
             mana_border_color = (200, 200, 255) # Light Blue/White border
             
-            mana_bg_rect = pygame.Rect(MANA_BAR_X, MANA_BAR_Y, MANA_BAR_WIDTH, MANA_BAR_HEIGHT)
-            mana_fg_rect_width = int(MANA_BAR_WIDTH * mana_ratio)
+            mana_bg_rect = pygame.Rect(MANA_BAR_X, MANA_BAR_Y, int(current_mana_bar_width), MANA_BAR_HEIGHT)
+            mana_fg_rect_width = int(current_mana_bar_width * mana_ratio)
             mana_fg_rect = pygame.Rect(MANA_BAR_X, MANA_BAR_Y, mana_fg_rect_width, MANA_BAR_HEIGHT)
             
             pygame.draw.rect(surface, mana_bg_color, mana_bg_rect)
@@ -772,6 +850,9 @@ class Game:
         # Draw the resume button if it exists
         if self.resume_button:
             self.resume_button.draw(surface)
+        # Draw the exit button if it exists
+        if self.exit_button:
+            self.exit_button.draw(surface)
 
     def _draw_wave_intro(self, surface):
         """Draws the WAVE text animation based on the current stage and timer."""

@@ -2,7 +2,7 @@ import pygame
 from pygame.math import Vector2
 from utils import load_sprite
 from constants import (SPEED, BASE_DAMAGE, INITIAL_XP_TO_LEVEL_UP, XP_LEVEL_MULTIPLIER, 
-                     BASE_MAX_MANA)
+                     BASE_MAX_MANA, BASE_PLAYER_HP)
 from weapon import MeleeWeapon, RangeWeapon
 from game_object import GameObject
 from weapon_stats import WEAPON_STATS
@@ -15,7 +15,7 @@ class Player(GameObject):
 		self.direction = Vector2(0, 0)
 		self.speed = SPEED
 		self.damage = BASE_DAMAGE
-		self.max_hp = 100 # Add max HP
+		self.max_hp = BASE_PLAYER_HP # Use constant for initial max HP
 		self.hp = self.max_hp # Start with full HP
 		
 		# --- Mana Attributes ---

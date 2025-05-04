@@ -8,12 +8,16 @@ from UI.ui_scenes.main_menu import MainMenu, ACTION_START_GAME, ACTION_OPEN_SETT
 # Import SettingsMenu later when created
 # from UI.ui_scenes.settings_menu import SettingsMenu, ACTION_CLOSE_SETTINGS
 from Scripts.constants import WINDOW_WIDTH, WINDOW_HEIGHT, ACTION_NEW_GAME
+from Scripts.game_states import STATE_MAIN_MENU, STATE_SETTINGS_MENU, STATE_GAMEPLAY, STATE_EXIT
 
-# --- Game States --- #
-STATE_MAIN_MENU = 'main_menu'
-STATE_SETTINGS_MENU = 'settings_menu'
-STATE_GAMEPLAY = 'gameplay'
-STATE_EXIT = 'exit'
+# Constants for game states
+# STATE_MAIN_MENU = 'main_menu'
+# STATE_SETTINGS_MENU = 'settings_menu'
+# STATE_GAMEPLAY = 'gameplay'
+# STATE_EXIT = 'exit'
+
+# Define action constants (can be expanded)
+# ACTION_PLAY = 'play'
 
 class GameController:
 	def __init__(self):

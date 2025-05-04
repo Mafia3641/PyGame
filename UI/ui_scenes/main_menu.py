@@ -6,18 +6,52 @@ from UI.button import Button
 import os
 # sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'Scripts')) # Removed redundant path modification
 # Import specific constants relative to project root (added by main.py)
-from Scripts.constants import PLAY_BUTTON_POSITION, SETTINGS_BUTTON_POSITION, EXIT_BUTTON_POSITION
+from Scripts.constants import PLAY_BUTTON_POSITION, SETTINGS_BUTTON_POSITION, EXIT_BUTTON_POSITION, WINDOW_WIDTH, WINDOW_HEIGHT
 
 # --- Action Constants --- #
 ACTION_START_GAME = 'start_game'
 ACTION_OPEN_SETTINGS = 'open_settings'
 ACTION_EXIT = 'exit'
 
+# --- OpenCV Video Background Imports ---
+try:
+    import cv2
+    import numpy # moviepy often uses numpy arrays for frames
+    OPENCV_AVAILABLE = True
+except ImportError:
+    print("Warning: OpenCV library (cv2) not found. Video background disabled. Install with 'pip install opencv-python'")
+    OPENCV_AVAILABLE = False
+# -----------------------------
+
 class MainMenu:
     def __init__(self):
         self.background_color = (255, 255, 255) # White background for now
         self.buttons = []
         self._setup_buttons()
+
+        # --- OpenCV Video Background Setup ---
+        self.video_capture = None
+        self.current_frame_surface = None
+
+        if OPENCV_AVAILABLE:
+            try:
+                video_path = "Videos/background_1.mp4"
+                self.video_capture = cv2.VideoCapture(video_path)
+                if not self.video_capture.isOpened():
+                    print(f"Error: Could not open video file: {video_path}")
+                    self.video_capture = None
+                else:
+                    # Get video properties (optional, useful for debugging)
+                    # width = int(self.video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    # height = int(self.video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    # fps = self.video_capture.get(cv2.CAP_PROP_FPS)
+                    # print(f"Video opened: {width}x{height} @ {fps:.2f} FPS")
+                    pass # Successfully opened
+
+            except Exception as e:
+                print(f"Error initializing video capture: {e}")
+                self.video_capture = None
+        # -----------------------------
 
     def _setup_buttons(self):
         # --- Button Callbacks --- #
@@ -85,10 +119,70 @@ class MainMenu:
         return action_taken # Return the first action detected from the list
 
     def update(self, dt):
-        # Main menu might not need updates unless animated
-        pass
+        # Update button states (e.g., for hover effects if any)
+        # Currently, buttons don't have separate update logic
+
+        # --- Update OpenCV Video Frame ---
+        if self.video_capture:
+            success, frame = self.video_capture.read()
+
+            if not success:
+                # End of video, loop back to the beginning
+                self.video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                success, frame = self.video_capture.read()
+
+            try:
+                if success:
+                    # --- Fit Inside Logic --- 
+                    frame_h, frame_w = frame.shape[:2]
+                    window_w, window_h = int(WINDOW_WIDTH), int(WINDOW_HEIGHT)
+                    
+                    # Calculate scale factor to fit within the window (preserving aspect ratio)
+                    scale_w = window_w / frame_w
+                    scale_h = window_h / frame_h
+                    scale_factor = min(scale_w, scale_h)
+
+                    # Calculate new dimensions and resize
+                    new_w = int(frame_w * scale_factor)
+                    new_h = int(frame_h * scale_factor)
+                    scaled_frame = cv2.resize(frame, (new_w, new_h))
+
+                    # --- End Fit Inside --- 
+
+                    # OpenCV uses BGR, convert to RGB for Pygame
+                    frame_rgb = cv2.cvtColor(scaled_frame, cv2.COLOR_BGR2RGB)
+                    # Convert to Pygame surface (requires rotation/flip)
+                    # OpenCV frames are typically (height, width, channels)
+                    # We need to rotate and flip for correct pygame display
+                    rotated_frame = numpy.rot90(frame_rgb)
+                    flipped_frame = numpy.flipud(rotated_frame)
+                    self.current_frame_surface = pygame.surfarray.make_surface(flipped_frame)
+                else:
+                    # If reading failed even after reset, stop trying
+                    self.current_frame_surface = None
+                    self.video_capture.release()
+                    self.video_capture = None
+
+            except Exception as e:
+                print(f"Error processing video frame: {e}")
+                self.current_frame_surface = None # Clear frame on error
+                if self.video_capture: # Release capture on error
+                    self.video_capture.release()
 
     def draw(self, surface):
-        surface.fill(self.background_color)
+        # --- Draw Video Background --- 
+        if self.current_frame_surface:
+            # Calculate position to center the scaled frame
+            frame_rect = self.current_frame_surface.get_rect()
+            screen_rect = surface.get_rect()
+            top_left_x = (screen_rect.width - frame_rect.width) // 2
+            top_left_y = (screen_rect.height - frame_rect.height) // 2
+            surface.blit(self.current_frame_surface, (top_left_x, top_left_y))
+        else:
+            # Fallback background color if video fails or isn't available
+            surface.fill((30, 30, 50))
+        # ---------------------------
+
+        # Draw buttons on top of the background
         for button in self.buttons:
             button.draw(surface) 

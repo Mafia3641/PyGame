@@ -54,9 +54,10 @@ class UpgradeBox:
         self.title_rects = []
         self.desc_surfs = []
         self.desc_rects = []
-        self.stats_surf = None
-        self.stats_rect = None
+        self.stats_surfs = [] # Store multiple surfaces for each line
+        self.stats_rects = [] # Store multiple rects
         self.icon_surf = None # Store potentially scaled icon
+        self.original_icon_surf = None # Store the original loaded icon
         self.icon_draw_rect = None # Rect to draw icon within its section
         
         self._load_resources()
@@ -77,10 +78,13 @@ class UpgradeBox:
         try:
             icon_path = self.data.get('icon', '')
             if icon_path and os.path.exists(icon_path):
-                self.icon_surf = pygame.image.load(icon_path).convert_alpha()
+                self.original_icon_surf = pygame.image.load(icon_path).convert_alpha() # Load into original
+                self.icon_surf = None # Reset scaled surface
             else:
-                 self.icon_surf = None # Explicitly set to None if not found
+                self.original_icon_surf = None
+                self.icon_surf = None
         except pygame.error as e:
+            self.original_icon_surf = None
             self.icon_surf = None
 
         # Load Fonts
@@ -99,9 +103,10 @@ class UpgradeBox:
         content_width = useful_rect.width
         
         # Define section heights based on percentages - ADJUSTED
-        icon_section_height = useful_rect.height * 0.40 # Increased from 0.20
-        text_section_height = useful_rect.height * 0.40 # Decreased from 0.50
-        stats_section_height = useful_rect.height * 0.20 # Decreased from 0.30
+        # Give even more space to the icon
+        icon_section_height = useful_rect.height * 0.30 
+        text_section_height = useful_rect.height * 0.50 
+        stats_section_height = useful_rect.height * 0.20
         
         # Define section rectangles (relative to useful_rect top-left)
         icon_section_rect = pygame.Rect(useful_rect.left, useful_rect.top, 
@@ -115,38 +120,65 @@ class UpgradeBox:
         text_color = (255, 255, 255)
 
         # --- Section 1: Icon (Top 40%) --- #
-        if self.icon_surf:
+        if self.original_icon_surf: # Check original surface
             # Restore logic to scale uniformly while fitting the section
             max_w = icon_section_rect.width
             max_h = icon_section_rect.height
-            icon_w, icon_h = self.icon_surf.get_size() # Get original size
-            
-            # Calculate scale factor to fit within the section (preserves aspect ratio)
-            # Avoid division by zero if icon dimensions are somehow 0
-            if icon_w > 0 and icon_h > 0:
-                scale = min(max_w / icon_w, max_h / icon_h)
-            else:
-                scale = 1.0 # Default scale if icon dimensions are invalid
+            icon_w, icon_h = self.original_icon_surf.get_size() # Get size from original
 
-            # Apply scaling (upscaling or downscaling)
-            new_w, new_h = int(icon_w * scale), int(icon_h * scale)
-            
+            # --- MODIFIED SCALING LOGIC ---
+            # Target scale factor (double the original size)
+            target_scale = 4.0 # Reduce target scale, likely not the limiting factor now
+
+            # Calculate potential new dimensions
+            potential_w = int(icon_w * target_scale)
+            potential_h = int(icon_h * target_scale)
+
+            # Calculate scale factor needed to fit within the section
+            scale_to_fit = 1.0
+            if icon_w > 0 and icon_h > 0:
+                 scale_to_fit = min(max_w / icon_w, max_h / icon_h)
+
+            # Use the smaller of the target scale or the scale needed to fit
+            final_scale = min(target_scale, scale_to_fit)
+
+            # Calculate dimensions based on fitting the section
+            fit_w, fit_h = int(icon_w * final_scale), int(icon_h * final_scale)
+
+            # Explicitly halve the dimensions to make icon smaller
+            new_w, new_h = fit_w // 2, fit_h // 2
+            # --- END MODIFIED SCALING LOGIC ---
+
             # Use smoothscale for potentially better quality
-            # Only scale if necessary (new dimensions are different)
             if (new_w, new_h) != (icon_w, icon_h):
-                 self.icon_surf = pygame.transform.smoothscale(self.icon_surf, (new_w, new_h))
-            
+                 # Ensure scaling is applied to the *original* loaded surface if it exists
+                 # (We store the original in self.icon before modification)
+                 # Scale from the original surface into self.icon_surf
+                 self.icon_surf = pygame.transform.smoothscale(self.original_icon_surf, (new_w, new_h))
+            else:
+                # If no scaling needed, just use the original surface
+                self.icon_surf = self.original_icon_surf.copy() # Use a copy to avoid modifying original
+
             # Center the scaled icon within the icon section
-            self.icon_draw_rect = self.icon_surf.get_rect(center=icon_section_rect.center)
+            if self.icon_surf:
+                # Center horizontally, but move up vertically by 24 pixels
+                self.icon_draw_rect = self.icon_surf.get_rect(centerx=icon_section_rect.centerx, 
+                                                             centery=icon_section_rect.centery - 24)
+            else: # Should not happen if original_icon_surf existed, but for safety
+                self.icon_draw_rect = None
         else:
-             self.icon_draw_rect = None # Ensure it's None if no icon
+            self.icon_surf = None # Ensure scaled surf is None if original doesn't exist
+            self.icon_draw_rect = None # Ensure it's None if no icon
 
         # --- Section 2: Title & Description (Middle 40%) --- #
-        current_y = text_section_rect.top # Reset Y for this section
+        # Restore original text positioning logic
+        current_y = text_section_rect.top 
+
         self.title_surfs = []
         self.title_rects = []
         self.desc_surfs = []
         self.desc_rects = []
+        # Restore available height calculation
         available_text_height = text_section_rect.height
 
         # Title
@@ -154,49 +186,57 @@ class UpgradeBox:
             title_lines = wrap_text(self.data['title'], self.title_font, content_width)
             title_line_height = self.title_font.get_linesize()
             for line in title_lines:
-                 if available_text_height - title_line_height < 0: break # Stop if no space
-                 surf = self.title_font.render(line, True, text_color)
-                 rect = surf.get_rect(centerx=text_section_rect.centerx, top=current_y)
-                 self.title_surfs.append(surf)
-                 self.title_rects.append(rect)
-                 current_y += title_line_height
-                 available_text_height -= title_line_height
+                # Restore check against available height
+                if available_text_height - title_line_height < 0: break 
+                surf = self.title_font.render(line, True, text_color)
+                # Restore centering
+                rect = surf.get_rect(centerx=text_section_rect.centerx, top=current_y)
+                self.title_surfs.append(surf)
+                self.title_rects.append(rect)
+                current_y += title_line_height
+                # Restore decrementing available height
+                available_text_height -= title_line_height
             current_y += 5 # Spacing after title
-            available_text_height -= 5
+            available_text_height -= 5 # Restore decrementing available height for spacing
 
         # Description
         if self.desc_font and self.data.get('description'):
             desc_lines = wrap_text(self.data['description'], self.desc_font, content_width)
             desc_line_height = self.desc_font.get_linesize()
             for line in desc_lines:
-                if available_text_height - desc_line_height < 0: break # Stop if no space
+                # Restore check against available height
+                if available_text_height - desc_line_height < 0: break
                 surf = self.desc_font.render(line, True, text_color)
-                # Position lines centered within the section
+                # Restore centering
                 rect = surf.get_rect(centerx=text_section_rect.centerx, top=current_y)
                 self.desc_surfs.append(surf)
                 self.desc_rects.append(rect)
                 current_y += desc_line_height
+                # Restore decrementing available height
                 available_text_height -= desc_line_height
 
         # --- Section 3: Stats (Bottom 20%) --- #
-        self.stats_surf = None
-        self.stats_rect = None
-        stats_text = ""
-        stats_data = self.data.get('stats', {})
-        if stats_data:
-            stat_lines = []
-            for stat, value in stats_data.items():
-                prefix = "+" if value >= 0 else ""
-                if "mult" in stat or "percent" in stat:
-                    stat_lines.append(f"{stat.replace('_', ' ').title()}: {prefix}{value*100:.0f}%")
-                else:
-                    stat_lines.append(f"{stat.replace('_', ' ').title()}: {prefix}{value}")
-            stats_text = " | ".join(stat_lines)
-        
-        if self.stats_font and stats_text:
-            self.stats_surf = self.stats_font.render(stats_text, True, (200, 255, 200))
-            # Center stats within the stats section rectangle
-            self.stats_rect = self.stats_surf.get_rect(center=stats_section_rect.center)
+        self.stats_surfs = [] # Store multiple surfaces for each line
+        self.stats_rects = [] # Store multiple rects
+        stats_messages = self.data.get('stats_message', [])
+        stats_color = (200, 255, 200)
+        current_stat_y = stats_section_rect.top + 5 # Start 5px below section top
+        stat_line_height = 0
+
+        if self.stats_font and stats_messages:
+            stat_line_height = self.stats_font.get_linesize()
+            max_stat_y = stats_section_rect.bottom - 5 # Limit 5px above section bottom
+
+            for message in stats_messages:
+                if current_stat_y + stat_line_height > max_stat_y:
+                    break # Stop if no more space
+
+                surf = self.stats_font.render(message, True, stats_color)
+                # Center each stat line horizontally within the stats section
+                rect = surf.get_rect(centerx=stats_section_rect.centerx, top=current_stat_y)
+                self.stats_surfs.append(surf)
+                self.stats_rects.append(rect)
+                current_stat_y += stat_line_height
         
     def draw(self, surface):
         # Draw background
@@ -207,30 +247,34 @@ class UpgradeBox:
         pygame.draw.rect(surface, (255, 255, 255), self.rect, 1) # White color, 1px thickness
         # --- END DEBUG --- #
 
-        # Get absolute position for drawing elements inside the box
         # The rects calculated in _prepare_layout are already in absolute screen coords relative to box origin
         # We just need to offset them by the box's actual position on the screen
-        abs_x, abs_y = self.position
+        abs_x, abs_y = self.position # Restore original offset calculation
 
         # Draw Icon
         if self.icon_surf and self.icon_draw_rect:
+            # Restore original blitting with offset
             surface.blit(self.icon_surf, (abs_x + self.icon_draw_rect.x - self.rect.x, 
                                           abs_y + self.icon_draw_rect.y - self.rect.y))
 
         # Draw Title Lines
         for i, surf in enumerate(self.title_surfs):
              rect = self.title_rects[i]
+             # Restore original blitting with offset
              surface.blit(surf, (abs_x + rect.x - self.rect.x, abs_y + rect.y - self.rect.y))
 
         # Draw Description Lines
         for i, surf in enumerate(self.desc_surfs):
              rect = self.desc_rects[i]
+             # Restore original blitting with offset
              surface.blit(surf, (abs_x + rect.x - self.rect.x, abs_y + rect.y - self.rect.y))
 
         # Draw Stats
-        if self.stats_surf and self.stats_rect:
-             surface.blit(self.stats_surf, (abs_x + self.stats_rect.x - self.rect.x, 
-                                             abs_y + self.stats_rect.y - self.rect.y))
+        # Draw Stat Lines
+        for i, surf in enumerate(self.stats_surfs):
+            rect = self.stats_rects[i]
+            # Use original blitting with offset for each line
+            surface.blit(surf, (abs_x + rect.x - self.rect.x, abs_y + rect.y - self.rect.y))
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
