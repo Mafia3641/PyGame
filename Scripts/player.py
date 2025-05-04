@@ -1,7 +1,8 @@
 import pygame
 from pygame.math import Vector2
 from utils import load_sprite
-from constants import SPEED, BASE_DAMAGE
+from constants import (SPEED, BASE_DAMAGE, INITIAL_XP_TO_LEVEL_UP, XP_LEVEL_MULTIPLIER, 
+                     BASE_MAX_MANA)
 from weapon import MeleeWeapon, RangeWeapon
 from game_object import GameObject
 from weapon_stats import WEAPON_STATS
@@ -17,6 +18,17 @@ class Player(GameObject):
 		self.max_hp = 100 # Add max HP
 		self.hp = self.max_hp # Start with full HP
 		
+		# --- Mana Attributes ---
+		self.max_mana = BASE_MAX_MANA
+		self.current_mana = self.max_mana # Start with full mana
+		# ---------------------
+		
+		# --- Leveling Attributes ---
+		self.current_level = 1
+		self.current_xp = 0
+		self.xp_for_next_level = INITIAL_XP_TO_LEVEL_UP
+		# -------------------------
+
 		self.idle_sprites = [
 			load_sprite('Player/Player_Idle/player_idle_1'),
 			load_sprite('Player/Player_Idle/player_idle_2'),
@@ -100,11 +112,9 @@ class Player(GameObject):
 		"""Reduces player HP and handles death."""
 		if self.hp > 0 and not self.is_dying: # Only take damage if alive and not already dying
 			self.hp -= amount
-			print(f"Player took {amount} damage, HP left: {self.hp}") # Debug
 			if self.hp <= 0:
 				self.hp = 0 # Prevent negative HP
 				# --- Trigger Death Sequence --- 
-				print("Player Death Sequence Started!") # Debug
 				self.is_dying = True
 				self.death_frame_index = 0
 				self.death_timer = 0.0
@@ -113,10 +123,38 @@ class Player(GameObject):
 					self.sprite = self.death_sprites[0]
 					self.rect.size = self.sprite.get_size()
 				# -----------------------------
-				# Remove old game over logic:
-				# print("Player Died!") 
-				# pygame.quit()
-				# sys.exit() 
+
+	# --- Leveling Methods --- #
+	def gain_xp(self, amount):
+		leveled_up = False # Flag to track if level up happened
+		if self.is_dying: # Cannot gain XP if dying
+			return leveled_up
+		
+		self.current_xp += amount
+		
+		# Check for level up (can happen multiple times if large XP gained)
+		while self.current_xp >= self.xp_for_next_level:
+			self.level_up()
+			leveled_up = True # Set flag
+			
+		return leveled_up # Return the flag
+
+	def level_up(self):
+		# Subtract the XP needed for the level just achieved
+		self.current_xp -= self.xp_for_next_level 
+		self.current_level += 1
+		# Calculate XP needed for the *next* level
+		self.xp_for_next_level = int(self.xp_for_next_level * XP_LEVEL_MULTIPLIER)
+		
+		# TODO: Optionally increase player stats here (e.g., max_hp, damage)
+		# self.max_hp += 10
+		# self.hp = self.max_hp # Heal on level up?
+		# self.damage += 5
+	# ------------------------
+
+	def restore_hp(self):
+		"""Restores player HP to maximum."""
+		self.hp = self.max_hp
 
 	def handle_input(self, events, camera: Camera, game_state):
 		# Movement handled in update based on get_pressed
@@ -138,15 +176,8 @@ class Player(GameObject):
 			target_frame_index = int(self.death_timer // self.death_frame_duration)
 			current_frame_index = min(target_frame_index, len(self.death_sprites) - 1)
 			
-			# --- DEBUG PRINTS --- 
-			print(f"Death Update: dt={dt:.4f}, timer={self.death_timer:.4f}, target_idx={target_frame_index}, current_idx={current_frame_index}, stored_idx={self.death_frame_index}")
-			# ------------------
-			
 			# Update sprite only if the frame index has changed
 			if current_frame_index != self.death_frame_index:
-				# --- DEBUG PRINT --- 
-				print(f"  >>> Updating death frame index from {self.death_frame_index} to {current_frame_index}")
-				# -------------------
 				self.death_frame_index = current_frame_index
 				self.sprite = self.death_sprites[self.death_frame_index]
 				self.rect.size = self.sprite.get_size() # Update rect size for new sprite
@@ -154,10 +185,6 @@ class Player(GameObject):
 			# Update rect position (even if stopped)
 			self.rect.center = (int(self.position.x), int(self.position.y))
 			
-			# Add a condition to check if animation cycle is complete (optional)
-			# if target_frame_index >= len(self.death_sprites):
-			#    print("Death animation cycle finished")
-				
 			return # Skip normal update
 		# ----------------------------------
 		
@@ -225,13 +252,9 @@ class Player(GameObject):
 		# Draw the player first (gets position updated by camera)
 		super().draw(surface, camera) 
 		
-		# --- Draw Cooldown Dots --- #
-		if self.active_weapon:
+		# --- Draw Cooldown Dots (Only if player is not dying) --- #
+		if not self.is_dying and self.active_weapon:
 			num_dots, dot_sprite = self.active_weapon.get_cooldown_dots()
-			# --- Debug Print --- #
-			if num_dots > 0: # Print only if dots should be shown
-				print(f"Player Draw - Dots: {num_dots}, Sprite: {dot_sprite}")
-			# ------------------- #
 			if num_dots > 0 and dot_sprite:
 				dot_width = dot_sprite.get_width()
 				dot_height = dot_sprite.get_height()
@@ -258,12 +281,12 @@ class Player(GameObject):
 				
 				for i in range(num_dots):
 					dot_x = start_x + i * (dot_width + spacing)
-					# --- Debug Print --- #
-					# print(f"  Drawing dot {i+1} at ({dot_x}, {y_pos})") # Uncomment if needed, can be verbose
-					# ------------------- #
 					surface.blit(dot_sprite, (int(dot_x), int(y_pos))) # Use int for blit coords
 		# -------------------------- #
 		
-		# Draw the weapon on top
-		if self.active_weapon:
-			self.active_weapon.draw(surface, camera)
+		# --- Draw the weapon ONLY if player is NOT dying ---
+		if not self.is_dying:
+			# Draw the weapon on top
+			if self.active_weapon:
+				self.active_weapon.draw(surface, camera)
+		# ----------------------------------------------------

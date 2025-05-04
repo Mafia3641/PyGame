@@ -3,6 +3,7 @@ from pygame.math import Vector2
 import math
 from game_object import GameObject
 from utils import load_sprite
+from constants import SLIME_XP_REWARD, SLIME_BASE_HP, SLIME_BASE_DAMAGE
 
 
 class NPCLogic:
@@ -82,12 +83,13 @@ class Enemy(GameObject):
 	и проверять коллизию с игроком.
 	"""
 	
-	def __init__(self, position, sprite, damage=10, speed=100, hp=100, attack_range=50, target=None):
+	def __init__(self, position, sprite, damage=10, speed=100, hp=100, attack_range=50, target=None, xp_reward=0):
 		# Инициализируем базовый объект
 		super().__init__(position, sprite, Vector2(0, 0))
 		self.damage = damage
 		self.hp = hp
 		self.max_hp = hp # Store max HP
+		self.xp_reward = xp_reward # XP granted on death
 		self.alive = True
 		self.should_be_removed = False
 		self.npc_logic = NPCLogic(target, speed, attack_range)
@@ -129,7 +131,7 @@ class Enemy(GameObject):
 				if self.npc_logic and self.npc_logic.target:
 					target_pos = self.npc_logic.target.position
 					if self.position.distance_to(target_pos) < self.npc_logic.attack_range:
-						print(f"Enemy dealt {self.damage} damage to player!") # Debug
+						# print(f"Enemy dealt {self.damage} damage to player!") # Debug
 						self.npc_logic.target.take_damage(self.damage)
 						
 				# Start cooldown regardless of hitting
@@ -154,7 +156,7 @@ class Enemy(GameObject):
 	def attack(self):
 		# Called by NPCLogic when in range and cooldown ready
 		if not self.is_attacking: # Should always be true if called by NPCLogic due to cooldown check
-			print("Enemy starts attack wind-up!") # Debug
+			# print("Enemy starts attack wind-up!") # Debug
 			self.is_attacking = True
 			self.attack_windup_timer = self.attack_anim_duration
 			# Animation switching logic can be added here or in update based on is_attacking
@@ -176,11 +178,17 @@ class Slime(Enemy):
 	Можно задать другие параметры скорости, урона, диапазона атаки.
 	"""
 	
-	def __init__(self, position, target):
+	def __init__(self, position, target, hp=SLIME_BASE_HP, damage=SLIME_BASE_DAMAGE):
 		# Загружаем спрайт для врага, например используя утилиту load_sprite
 		sprite = load_sprite("Enemies/Slime/Slime_idle/slime_idle_1", with_alpha=True)
-		# Инициализируем базовый класс с индивидуальными параметрами для Slime
-		super().__init__(position, sprite, damage=5, speed=120, hp=50, attack_range=30, target=target)
+		# Инициализируем базовый класс с параметрами, включая переданные hp и damage
+		super().__init__(position, sprite, 
+					 damage=damage, 
+					 speed=120, 
+					 hp=hp, 
+					 attack_range=30, 
+					 target=target, 
+					 xp_reward=SLIME_XP_REWARD)
 		
 		self.slime_move_sprites = [
 			load_sprite("Enemies/Slime/Slime_run/slime_move_1"),
@@ -223,6 +231,16 @@ class Slime(Enemy):
 		self.death_timer = 0.0
 		self.death_frame_index = 0
 		self.sprite = self.death_sprites[0]
+		
+		# --- Grant XP to Player Immediately --- #
+		try:
+			if self.npc_logic and self.npc_logic.target and not self.npc_logic.target.is_dying:
+				self.npc_logic.target.gain_xp(self.xp_reward)
+				# print(f"DEBUG: Granted {self.xp_reward} XP from Slime {id(self)} in die() method.") # Debug print
+		except AttributeError:
+			# print(f"Warning: Could not grant XP from Slime {id(self)}. Target or npc_logic missing?")
+			pass # Silently ignore if target missing
+		# ------------------------------------ #
 		
 	def update(self, dt):
 		# --- Knockback Check (Return if active) --- 
@@ -279,7 +297,7 @@ class Slime(Enemy):
 				if self.npc_logic and self.npc_logic.target:
 					target_pos = self.npc_logic.target.position
 					if self.position.distance_to(target_pos) < self.npc_logic.attack_range:
-						print(f"Slime dealt {self.damage} damage to player!") # Debug
+						# print(f"Slime dealt {self.damage} damage to player!") # Debug
 						self.npc_logic.target.take_damage(self.damage)
 				# Start cooldown
 				self.attack_cooldown_timer = self.attack_cooldown

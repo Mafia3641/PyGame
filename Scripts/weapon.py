@@ -33,10 +33,10 @@ class Weapon:
             self.dot_sprite = pygame.image.load(dot_path).convert_alpha()
             # print(f"DEBUG: Loaded sprite for dots: {dot_path}") # Remove debug print
         except pygame.error as e:
-            print(f"Warning: Could not load sprite for dots ({dot_path}): {e}")
+            # print(f"Warning: Could not load sprite for dots ({dot_path}): {e}")
             self.dot_sprite = None
         except FileNotFoundError:
-            print(f"Warning: Sprite file for dots not found: {dot_path}")
+            # print(f"Warning: Sprite file for dots not found: {dot_path}")
             self.dot_sprite = None
 
     def update_position(self):
@@ -88,8 +88,8 @@ class Weapon:
                 
         self.cooldown_dots = calculated_dots # Assign calculated value
         # --- Debug Print --- #
-        if self.cooldown_timer > 0: # Only print during active cooldown
-            print(f"  Weapon Cooldown - Timer: {self.cooldown_timer:.2f}/{total_cooldown:.2f}, Elapsed: {elapsed_time:.2f}, Dots: {self.cooldown_dots}")
+        # if self.cooldown_timer > 0: # Only print during active cooldown
+            # print(f"  Weapon Cooldown - Timer: {self.cooldown_timer:.2f}/{total_cooldown:.2f}, Elapsed: {elapsed_time:.2f}, Dots: {self.cooldown_dots}")
         # ------------------- #
         # -------------------------- #
 
@@ -181,6 +181,7 @@ class MeleeWeapon(Weapon):
         self.cooldown_timer = 0.0 # Add cooldown timer
         self.attack_arc_rad = math.radians(self.stats.get('attack_arc', 360)) # Get arc from stats, default to 360
         self.half_arc_rad = self.attack_arc_rad / 2
+        self.current_attack_direction = Vector2(1, 0) # Store direction of the current swing
     
     # Override attack method for directional arc
     def attack(self, target_pos: Vector2, game_state):
@@ -189,64 +190,25 @@ class MeleeWeapon(Weapon):
             self.attacking = True
             self.frame_index = 0
             self.timer = 0.0
-            self.hit_enemies_this_attack = set() # Track hits per attack swing
+            self.hit_enemies_this_attack = set() # Reset hit set for THIS swing
             
             # Set first attack frame immediately
             self.sprite = self.attack_sprites[0]
             self.update_position() # Position weapon for the first frame
             
-            print("Melee Attack Started") # Debug
-            
-            # --- Directional Hit Check --- 
+            # Calculate and store attack direction for this swing
             owner_pos = self.owner.position
-            attack_direction = (target_pos - owner_pos)
-            # Handle case where target_pos is exactly owner_pos (use owner's facing direction)
-            if attack_direction.length_squared() == 0: 
-                attack_direction = self.owner.last_direction.copy()
-            attack_direction.normalize_ip()
-            
-            # Get attack range from stats
-            attack_range_sq = self.stats.get('range', 50) ** 2 
+            direction = target_pos - owner_pos
+            if direction.length_squared() > 0:
+                 self.current_attack_direction = direction.normalize()
+            else: # Target is on player, use player facing as fallback
+                 self.current_attack_direction = self.owner.last_direction.copy().normalize()
+                 # Ensure fallback isn't zero vector
+                 if self.current_attack_direction.length_squared() == 0:
+                     self.current_attack_direction = Vector2(1, 0)
 
-            for enemy in game_state.enemies: # Access enemies via game_state
-                if not enemy.alive: continue # Skip dead enemies
-                
-                enemy_vector = enemy.position - owner_pos
-                distance_sq = enemy_vector.length_squared()
-                
-                # 1. Check Range
-                if distance_sq <= attack_range_sq and distance_sq > 0:
-                    # 2. Check Angle
-                    enemy_direction = enemy_vector.normalize()
-                    # Use dot product for angle check (more efficient than acos)
-                    # dot_product = attack_direction.dot(enemy_direction)
-                    # angle_rad = math.acos(max(-1.0, min(1.0, dot_product))) # Clamp dot product for safety
-                    
-                    # Alternative: Use angle_to for signed angle
-                    angle_degrees = attack_direction.angle_to(enemy_direction)
-                    
-                    # Check if the angle is within the arc
-                    if abs(angle_degrees) <= self.stats.get('attack_arc', 90) / 2:
-                        if enemy not in self.hit_enemies_this_attack:
-                            print(f"Hit enemy {id(enemy)} within arc") # Debug
-                            enemy.take_damage(self.stats.get('damage', 10)) # Get damage from stats
-                            self.hit_enemies_this_attack.add(enemy) # Mark as hit
-                            
-                            # Apply Knockback & Stun (get values from stats)
-                            knockback_strength = self.stats.get('knockback', 100)
-                            stun_duration = self.stats.get('stun_duration', 0.1)
-                            
-                            if knockback_strength > 0 and enemy.alive: # Only apply if alive
-                                push_direction = enemy_direction # We already have this normalized
-                                knockback_speed = knockback_strength * 3 # Adjust multiplier as needed
-                                knockback_duration = 0.15 # Keep knockback brief
-                                
-                                enemy.knockback_velocity = push_direction * knockback_speed
-                                enemy.knockback_timer = knockback_duration
-                                # Apply stun slightly longer than knockback potentially
-                                enemy.stun_timer = max(enemy.stun_timer, stun_duration) 
-                                # Recovery prevents immediate re-engagement
-                                enemy.knockback_recovery_timer = max(enemy.knockback_recovery_timer, knockback_duration + 0.3)
+            # print("Melee Attack Started") # Debug
+            
             # --- Start Cooldown --- #
             self.cooldown_timer = self.stats.get('cooldown', 0.5) # Start cooldown immediately
             # ---------------------- #
@@ -264,22 +226,55 @@ class MeleeWeapon(Weapon):
         
         if self.attacking:
             self.timer += dt
+            # Check if it's time to advance frame
             if self.timer >= self.frame_duration:
-                self.timer -= self.frame_duration
+                self.timer %= self.frame_duration
                 self.frame_index += 1
-                if self.frame_index < len(self.attack_sprites):
-                    # Advance animation frame
-                    self.sprite = self.attack_sprites[self.frame_index]
-                else:
-                    # Animation finished
-                    print("Melee Attack Finished - Starting Cooldown") # Debug
+                # Check if animation finished
+                if self.frame_index >= len(self.attack_sprites):
                     self.attacking = False
-                    self.sprite    = self.idle_sprite
-                    # Cooldown timer is now set/decremented by base class
-                    # self.cooldown_timer = self.stats.get('cooldown', 0.5) 
-                    return
+                    self.frame_index = 0
+                    self.sprite = self.idle_sprite # Return to idle
+                    # Cooldown is already running from attack()
+                    return # End update for this frame after animation finishes
+                else:
+                    self.sprite = self.attack_sprites[self.frame_index]
             
-            # NO continuous collision check during animation needed for this instant arc attack
+            # --- Hit Detection DURING First 3 Frames of Animation --- #
+            if self.frame_index < 3: # Only check for hits during frames 0, 1, 2
+                owner_pos = self.owner.position
+                attack_range_sq = self.stats.get('range', 50) ** 2 
+                attack_direction = self.current_attack_direction
+                if attack_direction.length_squared() == 0: attack_direction = Vector2(1,0) # Fallback just in case
+                
+                for enemy in game_state.enemies: 
+                    if not enemy.alive or enemy in self.hit_enemies_this_attack: 
+                        continue 
+                    
+                    enemy_vector = enemy.position - owner_pos
+                    distance_sq = enemy_vector.length_squared()
+                    
+                    if distance_sq <= attack_range_sq and distance_sq > 0:
+                        enemy_direction = enemy_vector.normalize()
+                        angle_degrees = attack_direction.angle_to(enemy_direction)
+                        
+                        if abs(angle_degrees) <= self.stats.get('attack_arc', 90) / 2:
+                            enemy.take_damage(self.stats.get('damage', 10)) 
+                            self.hit_enemies_this_attack.add(enemy) 
+                            
+                            knockback_strength = self.stats.get('knockback', 100)
+                            stun_duration = self.stats.get('stun_duration', 0.1)
+                            
+                            if knockback_strength > 0 and enemy.alive: 
+                                push_direction = enemy_direction 
+                                knockback_speed = knockback_strength * 3 
+                                knockback_duration = 0.15 
+                                
+                                enemy.knockback_velocity = push_direction * knockback_speed
+                                enemy.knockback_timer = knockback_duration
+                                enemy.stun_timer = max(enemy.stun_timer, stun_duration) 
+                                enemy.knockback_recovery_timer = max(enemy.knockback_recovery_timer, knockback_duration + 0.3)
+            # ---------------------------------------------------------- #
 
         else: # Not attacking
              # Ensure sprite is idle
@@ -384,8 +379,8 @@ class Projectile(GameObject):
             if not enemy.alive: continue
             
             if self.rect.colliderect(enemy.rect):
-                print(f"Projectile hit enemy {id(enemy)}") # Debug
-                enemy.take_damage(self.damage)
+                # print(f"Projectile hit enemy {id(enemy)}") # Debug
+                enemy.take_damage(self.damage) # Apply projectile damage
                 self.should_be_removed = True # Mark projectile for removal
                 
                 # Apply Knockback & Stun

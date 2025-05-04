@@ -15,7 +15,6 @@ class Button:
             pressed_sprite_base = pygame.Surface(placeholder_size, pygame.SRCALPHA)
             pressed_sprite_base.fill((50, 50, 50, 200))
         except FileNotFoundError:
-             print(f"Error: Button sprite not found at {unpressed_sprite_path} or {pressed_sprite_path}")
              placeholder_size = (100, 50)
              unpressed_sprite_base = pygame.Surface(placeholder_size, pygame.SRCALPHA)
              unpressed_sprite_base.fill((100, 100, 100, 150))
