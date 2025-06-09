@@ -61,15 +61,22 @@ class Game:
         self.spawner = Spawner(self.player, self.game_state)
         # --------------- #
 
+        # Audio manager reference (will be set by controller)
+        self.audio_manager = None
+        
+        # Volume control variables
+        self.slider_rect = pygame.Rect(0, 0, 300, 10)  # Will be centered later
+        self.slider_handle_radius = 15
+        self.is_dragging = False
+        self.volume_font = pygame.font.Font(None, 48)
+        self.volume_text = self.volume_font.render("Громкость", True, (255, 255, 255))
+        
         # Pause State
         self.is_paused = False
         self._setup_pause_button()
         self._setup_resume_button()
         self._setup_pause_overlay_elements()
-
-        # Initial setup (moved from old main_loop)
-        # self._spawn_initial_entities()
-
+        
         # --- Wave Announcement State ---
         self.current_wave = 0 # Start at wave 0 for initial upgrade
         self.is_showing_wave_intro = False # Wave intro starts after first upgrade
@@ -83,7 +90,7 @@ class Game:
         self.game_over_font = None
         self.game_over_timer = 0.0 # Timer for text animation
         self.new_game_button_appear_timer = 0.0 # Timer for button delay
-        self.new_game_button = None # Button object placeholder
+        self.new_game_button = None
         # -----------------------
 
         # --- Upgrade State ---
@@ -159,9 +166,6 @@ class Game:
 
     def _setup_pause_overlay_elements(self):
         """Pre-render elements needed for the pause overlay."""
-        self.exit_button = None # Initialize exit button
-        
-        # Font Loading
         try:
             self.pause_font = pygame.font.Font(None, 74) # Use default font, size 74
         except pygame.error:
@@ -217,6 +221,9 @@ class Game:
         except FileNotFoundError:
             print(f"Error: Exit button sprite not found")
         # ---------------------------- #
+
+        # Center volume elements
+        self._center_volume_elements()
 
     # Remove initial entity spawning, handled by Spawner now
     # def _spawn_initial_entities(self):
@@ -368,6 +375,35 @@ class Game:
                 # elif event.type == pygame.KEYDOWN: # Example for other inputs
                 #     self.player.handle_input([event], self.camera, self.game_state)
 
+        # Handle volume slider in pause menu
+        if self.is_paused and self.audio_manager:
+            for event in events:
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1:  # Left click
+                        handle_pos = (
+                            self.slider_rect.left + self.audio_manager.get_volume() * self.slider_rect.width,
+                            self.slider_rect.centery
+                        )
+                        handle_rect = pygame.Rect(
+                            handle_pos[0] - self.slider_handle_radius,
+                            handle_pos[1] - self.slider_handle_radius,
+                            self.slider_handle_radius * 2,
+                            self.slider_handle_radius * 2
+                        )
+                        if handle_rect.collidepoint(event.pos):
+                            self.is_dragging = True
+                            
+                elif event.type == pygame.MOUSEBUTTONUP:
+                    if event.button == 1:  # Left click
+                        self.is_dragging = False
+                        
+                elif event.type == pygame.MOUSEMOTION:
+                    if self.is_dragging:
+                        # Update volume based on mouse position
+                        rel_x = event.pos[0] - self.slider_rect.left
+                        new_volume = max(0.0, min(1.0, rel_x / self.slider_rect.width))
+                        self.audio_manager.set_volume(new_volume)
+        
         # Continuous input (like movement) is handled in player.update
         
     # Renamed _process_game_logic to update
@@ -843,14 +879,37 @@ class Game:
 
     def _draw_pause_overlay(self, surface):
         """Draws the pre-rendered semi-transparent overlay and PAUSED text."""
-        # Blit the pre-rendered overlay surface
+        # Draw existing pause menu elements
         surface.blit(self.pause_overlay_surface, (0, 0))
-        # Blit the pre-rendered text surface
         surface.blit(self.paused_text_surface, self.paused_text_rect)
-        # Draw the resume button if it exists
+        
+        # Draw volume controls
+        if self.audio_manager:
+            # Draw volume label
+            surface.blit(self.volume_text, self.volume_text_rect)
+            
+            # Draw slider background
+            pygame.draw.rect(surface, (100, 100, 100), self.slider_rect)
+            
+            # Draw filled portion of slider
+            filled_rect = pygame.Rect(
+                self.slider_rect.left,
+                self.slider_rect.top,
+                self.slider_rect.width * self.audio_manager.get_volume(),
+                self.slider_rect.height
+            )
+            pygame.draw.rect(surface, (200, 200, 200), filled_rect)
+            
+            # Draw slider handle
+            handle_pos = (
+                self.slider_rect.left + self.audio_manager.get_volume() * self.slider_rect.width,
+                self.slider_rect.centery
+            )
+            pygame.draw.circle(surface, (255, 255, 255), handle_pos, self.slider_handle_radius)
+        
+        # Draw buttons
         if self.resume_button:
             self.resume_button.draw(surface)
-        # Draw the exit button if it exists
         if self.exit_button:
             self.exit_button.draw(surface)
 
@@ -994,3 +1053,25 @@ class Game:
         """Callback function for the New Game button."""
         print("New Game button clicked!") # Debug
         return ACTION_NEW_GAME # Signal the controller
+
+    def set_audio_manager(self, audio_manager):
+        self.audio_manager = audio_manager
+
+    def _center_volume_elements(self):
+        # Center volume elements between PAUSED text and resume button
+        screen_rect = pygame.display.get_surface().get_rect()
+        
+        # Position volume text
+        self.volume_text_rect = self.volume_text.get_rect(
+            centerx=screen_rect.centerx,
+            top=self.paused_text_rect.bottom + 50
+        )
+        
+        # Position slider below volume text
+        self.slider_rect.centerx = screen_rect.centerx
+        self.slider_rect.top = self.volume_text_rect.bottom + 20
+        
+        # Move resume button below slider
+        if self.resume_button:
+            self.resume_button.rect.centerx = screen_rect.centerx
+            self.resume_button.rect.top = self.slider_rect.bottom + 40

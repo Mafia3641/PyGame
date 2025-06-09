@@ -1,16 +1,16 @@
 from pygame.math import Vector2
 
 ACCELERATION = 0.25
-WINDOW_WIDTH = 1920*0.9
-WINDOW_HEIGHT = 1080*0.9
+WINDOW_WIDTH = 1920*0.7
+WINDOW_HEIGHT = 1080*0.7
 SPEED = 250
 FPS = 240
 BASE_DAMAGE = 60
 UP = Vector2(0, -1)
 
 # --- UI Constants ---
-PLAY_BUTTON_POSITION = (770, 500)  # Approx center for 1728x972
-SETTINGS_BUTTON_POSITION = (90, 80) # Left, aligned with play
+PLAY_BUTTON_POSITION = (WINDOW_WIDTH/2-50, WINDOW_HEIGHT/2)  # Approx center for 1728x972
+SETTINGS_BUTTON_POSITION = (20, 20) # Left, aligned with play
 EXIT_BUTTON_POSITION = (1628, 20) # Top-right
 
 # --- Leveling Constants ---

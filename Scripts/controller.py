@@ -5,10 +5,10 @@ import os
 # Assuming this file is in Scripts/ and main.py added project root to path
 from Scripts.game import Game
 from UI.ui_scenes.main_menu import MainMenu, ACTION_START_GAME, ACTION_OPEN_SETTINGS, ACTION_EXIT
-# Import SettingsMenu later when created
-# from UI.ui_scenes.settings_menu import SettingsMenu, ACTION_CLOSE_SETTINGS
+from UI.ui_scenes.settings_menu import SettingsMenu, ACTION_CLOSE_SETTINGS
 from Scripts.constants import WINDOW_WIDTH, WINDOW_HEIGHT, ACTION_NEW_GAME
 from Scripts.game_states import STATE_MAIN_MENU, STATE_SETTINGS_MENU, STATE_GAMEPLAY, STATE_EXIT
+from Scripts.audio_manager import AudioManager
 
 # Constants for game states
 # STATE_MAIN_MENU = 'main_menu'
@@ -30,8 +30,13 @@ class GameController:
 		self.clock = pygame.time.Clock()
 		self.current_state = STATE_MAIN_MENU
 		self.active_scene = MainMenu() 
-		# self.settings_menu = None # Initialize lazily when needed
-		# self.game_instance = None # Initialize lazily when needed
+		self.settings_menu = None
+		self.game_instance = None
+		
+		# Initialize audio manager
+		self.audio_manager = AudioManager()
+		# Start playing menu music
+		self.audio_manager.play_menu_music()
 
 	def run(self):
 		while self.current_state != STATE_EXIT:
@@ -76,7 +81,8 @@ class GameController:
 				
 			pygame.display.update()
 			
-		# --- Cleanup --- #
+		# Stop music before quitting
+		self.audio_manager.stop_music()
 		pygame.quit()
 		sys.exit()
 
@@ -84,10 +90,12 @@ class GameController:
 		# print(f"DEBUG: GameController._handle_action received action: {action}")
 		if action == ACTION_START_GAME:
 			# print("Transitioning to Gameplay State...")
-			self.active_scene = Game() # Create Game instance
-			pygame.display.set_caption("Terra") # Update caption
-			
+			self.active_scene = Game()
+			self.active_scene.set_audio_manager(self.audio_manager)
+			pygame.display.set_caption("Terra")
 			self.current_state = STATE_GAMEPLAY
+			# Switch to game music
+			self.audio_manager.play_game_music()
 			# The Game class needs its own main_loop structure now
 			# or we need to integrate its logic here.
 			# For now, assuming Game() runs its own loop logic in update/draw
@@ -100,18 +108,18 @@ class GameController:
 			# For now, let's just switch the scene/state.
 		
 		elif action == ACTION_OPEN_SETTINGS:
-			# print("Transitioning to Settings State...")
-			# self.settings_menu = SettingsMenu() # Create Settings instance
-			# self.active_scene = self.settings_menu 
-			# self.current_state = STATE_SETTINGS_MENU
-			# print("Settings Menu not implemented yet.")
-			pygame.display.set_caption("Terra - Settings") # Update caption
+			if not self.settings_menu:
+				self.settings_menu = SettingsMenu()
+				# Pass audio manager to settings menu
+				self.settings_menu.set_audio_manager(self.audio_manager)
+			self.active_scene = self.settings_menu
+			self.current_state = STATE_SETTINGS_MENU
+			pygame.display.set_caption("Terra - Settings")
 		
-		# elif action == ACTION_CLOSE_SETTINGS: # From settings menu
-		#     print("Transitioning back to Main Menu...")
-		#     self.active_scene = MainMenu() 
-		#     self.current_state = STATE_MAIN_MENU
-		#     pygame.display.set_caption("Terra - Main Menu") # Update caption
+		elif action == ACTION_CLOSE_SETTINGS:
+			self.active_scene = MainMenu()
+			self.current_state = STATE_MAIN_MENU
+			pygame.display.set_caption("Terra - Main Menu")
 		
 		elif action == ACTION_EXIT:
 			# print("Exiting game.")
@@ -120,9 +128,12 @@ class GameController:
 		# Handle New Game action
 		elif action == ACTION_NEW_GAME:
 			# print("Restarting Game State...")
-			self.active_scene = Game() # Create a new Game instance
-			pygame.display.set_caption("Terra") # Reset caption
-			self.current_state = STATE_GAMEPLAY # Stay in gameplay state
+			self.active_scene = Game()
+			self.active_scene.set_audio_manager(self.audio_manager)
+			pygame.display.set_caption("Terra")
+			self.current_state = STATE_GAMEPLAY
+			# Switch to game music
+			self.audio_manager.play_game_music()
 		else:
 			# print(f"Warning: Unhandled action '{action}'")
 			pass # Do nothing for unhandled actions 
