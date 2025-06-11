@@ -6,8 +6,12 @@ import os
 from Scripts.game import Game
 from UI.ui_scenes.main_menu import MainMenu, ACTION_START_GAME, ACTION_OPEN_SETTINGS, ACTION_EXIT
 from UI.ui_scenes.settings_menu import SettingsMenu, ACTION_CLOSE_SETTINGS
+from UI.ui_scenes.weapon_selection_menu import WeaponSelectionMenu, ACTION_START_MELEE, ACTION_START_RANGED
 from Scripts.constants import WINDOW_WIDTH, WINDOW_HEIGHT, ACTION_NEW_GAME
-from Scripts.game_states import STATE_MAIN_MENU, STATE_SETTINGS_MENU, STATE_GAMEPLAY, STATE_EXIT
+from Scripts.game_states import (
+	STATE_MAIN_MENU, STATE_SETTINGS_MENU, STATE_GAMEPLAY, 
+	STATE_EXIT, STATE_GO_TO_MENU, STATE_WEAPON_SELECTION
+)
 from Scripts.audio_manager import AudioManager
 
 # Constants for game states
@@ -31,6 +35,7 @@ class GameController:
 		self.current_state = STATE_MAIN_MENU
 		self.active_scene = MainMenu() 
 		self.settings_menu = None
+		self.weapon_selection_menu = None
 		self.game_instance = None
 		
 		# Initialize audio manager
@@ -89,24 +94,21 @@ class GameController:
 	def _handle_action(self, action):
 		# print(f"DEBUG: GameController._handle_action received action: {action}")
 		if action == ACTION_START_GAME:
-			# print("Transitioning to Gameplay State...")
-			self.active_scene = Game()
+			if not self.weapon_selection_menu:
+				self.weapon_selection_menu = WeaponSelectionMenu()
+				self.weapon_selection_menu.set_audio_manager(self.audio_manager)
+			self.active_scene = self.weapon_selection_menu
+			self.current_state = STATE_WEAPON_SELECTION
+			pygame.display.set_caption("Terra - Choose Weapon")
+
+		elif action == ACTION_START_MELEE or action == ACTION_START_RANGED:
+			weapon_type = 'melee' if action == ACTION_START_MELEE else 'ranged'
+			self.active_scene = Game(starting_weapon_type=weapon_type)
 			self.active_scene.set_audio_manager(self.audio_manager)
 			pygame.display.set_caption("Terra")
 			self.current_state = STATE_GAMEPLAY
-			# Switch to game music
 			self.audio_manager.play_game_music()
-			# The Game class needs its own main_loop structure now
-			# or we need to integrate its logic here.
-			# For now, assuming Game() runs its own loop logic in update/draw
-			# --> Let's adapt Game class later. For now, this will break the flow.
-			# --> TEMPORARY FIX: Just start the game's loop directly.
-			# self.active_scene.main_loop() 
-			# self.current_state = STATE_EXIT # Exit after game loop finishes (temporary)
-			# print("Game instance created. Need to adapt Game class loop.")
-			# We will integrate Game's loop into the GameController later.
-			# For now, let's just switch the scene/state.
-		
+
 		elif action == ACTION_OPEN_SETTINGS:
 			if not self.settings_menu:
 				self.settings_menu = SettingsMenu()
@@ -125,15 +127,23 @@ class GameController:
 			# print("Exiting game.")
 			self.current_state = STATE_EXIT
 		
+		elif action == STATE_GO_TO_MENU:
+			self.active_scene = MainMenu()
+			self.active_scene.set_audio_manager(self.audio_manager)
+			self.current_state = STATE_MAIN_MENU
+			pygame.display.set_caption("Terra - Main Menu")
+			self.audio_manager.play_menu_music()
+		
 		# Handle New Game action
 		elif action == ACTION_NEW_GAME:
-			# print("Restarting Game State...")
-			self.active_scene = Game()
-			self.active_scene.set_audio_manager(self.audio_manager)
-			pygame.display.set_caption("Terra")
-			self.current_state = STATE_GAMEPLAY
-			# Switch to game music
-			self.audio_manager.play_game_music()
+			# For new game, we can bypass weapon selection and use a default, or go back to it.
+			# Let's go back to weapon selection for consistency.
+			if not self.weapon_selection_menu:
+				self.weapon_selection_menu = WeaponSelectionMenu()
+				self.weapon_selection_menu.set_audio_manager(self.audio_manager)
+			self.active_scene = self.weapon_selection_menu
+			self.current_state = STATE_WEAPON_SELECTION
+			pygame.display.set_caption("Terra - Choose Weapon")
 		else:
 			# print(f"Warning: Unhandled action '{action}'")
 			pass # Do nothing for unhandled actions 

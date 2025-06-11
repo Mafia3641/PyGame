@@ -53,6 +53,9 @@ class MainMenu:
                 self.video_capture = None
         # -----------------------------
 
+    def set_audio_manager(self, audio_manager):
+        self.audio_manager = audio_manager
+
     def _setup_buttons(self):
         # --- Button Callbacks --- #
         def start_game_callback():

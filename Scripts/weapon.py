@@ -4,6 +4,8 @@ import math # Import math module
 from game_object import GameObject
 from utils import load_sprite
 import random
+from weapon_stats import WEAPON_STATS
+from math import atan2, degrees
 # Import constants for screen dimensions
 from constants import WINDOW_WIDTH, WINDOW_HEIGHT 
 
@@ -114,39 +116,26 @@ class Weapon:
             self.update_position()
 
     def draw(self, surface, camera):
-        if camera:
-            # Create a temporary rect for camera.apply, as Weapon doesn't inherit GameObject's rect handling
-            # Use self.rect which is updated in update_position
-            temp_obj_for_apply = pygame.sprite.Sprite() # Dummy sprite object
-            temp_obj_for_apply.rect = self.rect # Use the weapon's calculated world rect
-            temp_obj_for_apply.image = self.sprite # Needed if camera.apply expects an image
-            
-            screen_rect = camera.apply(temp_obj_for_apply)
+        if not self.sprite: return
 
-            # Check if the object is roughly on screen
-            if screen_rect.colliderect(surface.get_rect()):
-                # Scale the sprite
-                w = max(1, int(screen_rect.width))
-                h = max(1, int(screen_rect.height))
-                if self.sprite and w > 0 and h > 0: # Ensure sprite exists and size is valid
-                    # Scale the sprite first
-                    scaled_sprite = pygame.transform.scale(self.sprite, (w, h))
-                    
-                    # --- Flip based on owner's direction --- 
-                    flip_horizontal = self.owner.last_direction.x < 0
-                    final_sprite = pygame.transform.flip(scaled_sprite, flip_horizontal, False) if flip_horizontal else scaled_sprite
-                    # ------------------------------------
-                    
-                    # Blit the final (scaled and potentially flipped) sprite
-                    surface.blit(final_sprite, screen_rect.topleft)
-        else:
-            # Fallback if no camera (shouldn't happen with current game structure)
-            if self.sprite:
-                # --- Flip based on owner's direction (non-camera case) ---
-                flip_horizontal = self.owner.last_direction.x < 0
-                final_sprite = pygame.transform.flip(self.sprite, flip_horizontal, False) if flip_horizontal else self.sprite
-                # ------------------------------------------------------
-                surface.blit(final_sprite, self.rect.topleft)
+        # Flip based on owner's direction
+        flip_horizontal = self.owner.last_direction.x < 0
+        
+        # Correctly get the final sprite to be drawn (could be from an animation)
+        # For base weapon, it's just the one sprite. For subclasses, this might be different.
+        current_sprite = self.sprite
+        
+        final_sprite = pygame.transform.flip(current_sprite, flip_horizontal, False)
+
+        # Create a dummy object for camera application
+        temp_obj_for_apply = pygame.sprite.Sprite()
+        temp_obj_for_apply.rect = self.rect # World rect
+        temp_obj_for_apply.image = final_sprite # The sprite to be drawn
+
+        screen_rect = camera.apply(temp_obj_for_apply)
+
+        # Blit the final, correctly oriented sprite
+        surface.blit(final_sprite, screen_rect.topleft)
 
     def get_cooldown_dots(self):
         """Returns the number of dots to display and the dot sprite."""
@@ -172,6 +161,16 @@ class MeleeWeapon(Weapon):
         # спрайты
         self.idle_sprite    = load_sprite(idle_sprite_name, with_alpha=True)
         self.attack_sprites = [load_sprite(n, with_alpha=True) for n in attack_sprite_names]
+        
+        # Get scale from stats, default to 1 if not present
+        scale = self.stats.get('scale', 1)
+        if scale != 1:
+            # Scale idle sprite
+            w, h = self.idle_sprite.get_size()
+            self.idle_sprite = pygame.transform.scale(self.idle_sprite, (int(w * scale), int(h * scale)))
+            # Scale attack sprites
+            self.attack_sprites = [pygame.transform.scale(s, (int(s.get_width() * scale), int(s.get_height() * scale))) for s in self.attack_sprites]
+
         # текущее состояние анимации
         self.sprite         = self.idle_sprite
         self.attacking      = False
@@ -183,6 +182,34 @@ class MeleeWeapon(Weapon):
         self.half_arc_rad = self.attack_arc_rad / 2
         self.current_attack_direction = Vector2(1, 0) # Store direction of the current swing
     
+    def update_position(self):
+        if not self.sprite: return # Should not happen if called from update check, but safer
+        
+        # Anchor the weapon to the owner's visual rect center
+        anchor_pos = Vector2(self.owner.rect.center)
+        
+        # --- Adjust offset based on owner direction --- 
+        base_offset = self.offset
+        flip_horizontal = self.owner.last_direction.x < 0
+
+        if flip_horizontal:
+            # When looking left, move 20px to the right from the mirrored position
+            adjusted_offset = Vector2(-base_offset.x + 20, base_offset.y)
+        else:
+            # When looking right, move 2px to the left from the standard position
+            adjusted_offset = Vector2(base_offset.x - 2, base_offset.y)
+        # --------------------------------------------
+        
+        # Apply the adjusted offset to the anchor position
+        target_weapon_center = anchor_pos + adjusted_offset
+        
+        # Get the weapon sprite's rect (to know its size)
+        # Re-fetch the *original* sprite's rect for size, center it later
+        self.rect = self.sprite.get_rect()
+        
+        # Set the weapon rect's center to the calculated target position
+        self.rect.center = target_weapon_center
+
     # Override attack method for directional arc
     def attack(self, target_pos: Vector2, game_state):
         # Start attack only if not already attacking and cooldown is ready
@@ -211,8 +238,6 @@ class MeleeWeapon(Weapon):
             
             # --- Start Cooldown --- #
             self.cooldown_timer = self.stats.get('cooldown', 0.5) # Start cooldown immediately
-            # ---------------------- #
-            # ----------------------------
 
     def update(self, dt, game_state):
         # --- Call Base Class Update First --- #
@@ -248,40 +273,24 @@ class MeleeWeapon(Weapon):
                 if attack_direction.length_squared() == 0: attack_direction = Vector2(1,0) # Fallback just in case
                 
                 for enemy in game_state.enemies: 
-                    if not enemy.alive or enemy in self.hit_enemies_this_attack: 
-                        continue 
-                    
-                    enemy_vector = enemy.position - owner_pos
-                    distance_sq = enemy_vector.length_squared()
-                    
-                    if distance_sq <= attack_range_sq and distance_sq > 0:
-                        enemy_direction = enemy_vector.normalize()
-                        angle_degrees = attack_direction.angle_to(enemy_direction)
-                        
-                        if abs(angle_degrees) <= self.stats.get('attack_arc', 90) / 2:
-                            enemy.take_damage(self.stats.get('damage', 10)) 
-                            self.hit_enemies_this_attack.add(enemy) 
-                            
-                            knockback_strength = self.stats.get('knockback', 100)
-                            stun_duration = self.stats.get('stun_duration', 0.1)
-                            
-                            if knockback_strength > 0 and enemy.alive: 
-                                push_direction = enemy_direction 
-                                knockback_speed = knockback_strength * 3 
-                                knockback_duration = 0.15 
-                                
-                                enemy.knockback_velocity = push_direction * knockback_speed
-                                enemy.knockback_timer = knockback_duration
-                                enemy.stun_timer = max(enemy.stun_timer, stun_duration) 
-                                enemy.knockback_recovery_timer = max(enemy.knockback_recovery_timer, knockback_duration + 0.3)
-            # ---------------------------------------------------------- #
+                    if enemy not in self.hit_enemies_this_attack: # Hit each enemy only once per swing
+                        if not enemy.alive:
+                            continue
+                        enemy_vec = enemy.position - owner_pos
+                        if enemy_vec.length_squared() < attack_range_sq:
+                            # --- Arc-based Hit Detection --- #
+                            if attack_direction.length() > 0 and enemy_vec.length() > 0:
+                                angle_between = attack_direction.angle_to(enemy_vec)
+                                if abs(angle_between) <= math.degrees(self.half_arc_rad):
+                                    # print(f"  Enemy {enemy} hit within arc.") # Debug
+                                    enemy.take_damage(self.stats.get('damage', 0))
+                                    enemy.apply_knockback(attack_direction, self.stats.get('repulsion', 0), 0.1) # Repulsion is knockback strength
+                                    self.hit_enemies_this_attack.add(enemy)
+                            # ----------------------------- #
 
-        else: # Not attacking
-             # Ensure sprite is idle
+        else: # Not attacking, sprite should be idle
             self.sprite = self.idle_sprite
-             # Cooldown timer decrement is handled by base class
-             # if self.cooldown_timer > 0:
-             #     self.cooldown_timer -= dt
+            self.update_position()
 
 
 class RangeWeapon(Weapon):
@@ -293,109 +302,203 @@ class RangeWeapon(Weapon):
         weapon_idle_sprite: str, # Keep sprite names separate for now
         projectile_sprite_name: str,
     ):
-        super().__init__(owner, offset, stats) # Pass stats to base
-        # Access stats via self.stats['key']
+        super().__init__(owner, offset, stats)
+        # Load sprites
+        self.idle_sprite = load_sprite(weapon_idle_sprite, with_alpha=True)
+        self.sprite = self.idle_sprite
         self.projectile_sprite_name = projectile_sprite_name
-        self.weapon_idle_sprite     = weapon_idle_sprite # Might need this for display
-        self.sprite = load_sprite(self.weapon_idle_sprite, with_alpha=True) # Load weapon sprite
-        self.projectiles: list[Projectile] = []
+        self.angle = 0 # For aiming visual
 
-    # Modify attack to accept target world position and game_state
+    def update_position(self):
+        if not self.sprite: return
+
+        anchor_pos = Vector2(self.owner.rect.center)
+        
+        # We don't use horizontal flip for ranged aiming, aiming is done with rotation
+        target_weapon_center = anchor_pos + self.offset.rotate(-self.angle)
+        
+        # Use the idle_sprite for the rect calculation to have a consistent size before rotation
+        self.rect = self.idle_sprite.get_rect(center=target_weapon_center)
+
     def attack(self, target_pos: Vector2, game_state):
-        if self.cooldown_timer <= 0.0: # Check base class cooldown_timer
-            # Calculate direction from owner to target
-            direction = (target_pos - self.owner.position)
-            if direction.length_squared() > 0: # Avoid normalizing zero vector
-                direction.normalize_ip()
-            else: # If target is on owner, use owner's facing direction
-                direction = self.owner.last_direction.copy().normalize()
-                
-            # Apply accuracy spread (if defined in stats)
-            accuracy_angle = self.stats.get('accuracy', 0) # Default to 0 spread
-            if accuracy_angle > 0:
-                spread_radians = math.radians((random.random() - 0.5) * accuracy_angle)
-                direction.rotate_ip_rad(spread_radians)
-            
-            # Calculate spawn position (owner center + offset)
-            spawn_pos = self.owner.rect.center + self.offset 
-            
-            # Get projectile stats from weapon stats
-            proj_speed = self.stats.get('projectile_speed', 300)
-            proj_damage = self.stats.get('damage', 5)
-            proj_knockback = self.stats.get('knockback', 50)
-            proj_stun = self.stats.get('stun_duration', 0.1)
-            
-            proj = Projectile(
-                position=spawn_pos, 
-                direction=direction, 
-                speed=proj_speed, 
-                sprite_name=self.projectile_sprite_name, 
-                damage=proj_damage, 
-                knockback=proj_knockback, # Pass knockback
-                stun=proj_stun # Pass stun
-            )
-            game_state.projectiles.append(proj) # Add to game_state's list
-            self.cooldown_timer = self.stats.get('cooldown', 1.0) # Set base class cooldown_timer
+        if self.cooldown_timer > 0:
+            return # Can't attack while on cooldown
+
+        # --- Mana Cost ---
+        mana_cost = self.stats.get('mana_cost', 0)
+        if mana_cost > 0:
+            if hasattr(self.owner, 'consume_mana'):
+                if not self.owner.consume_mana(mana_cost):
+                    # print("Not enough mana!") # Optional debug message
+                    return # Block attack if not enough mana
+        # -----------------
+
+        # Calculate direction from owner to target
+        owner_pos = self.owner.position
+        direction = target_pos - owner_pos
+        if direction.length_squared() > 0:
+            direction = direction.normalize()
+        else:
+            direction = Vector2(1, 0) # Fallback if target is on owner
+
+        # --- Accuracy --- #
+        accuracy_degrees = self.stats.get('accuracy', 0)
+        if accuracy_degrees > 0:
+            spread = random.uniform(-accuracy_degrees, accuracy_degrees)
+            direction.rotate_ip(spread) # In-place rotation
+        # ---------------- #
+        
+        # Get projectile stats from weapon stats
+        projectile_speed = self.stats.get('projectile_speed', 300)
+        damage = self.stats.get('damage', 5)
+        knockback = self.stats.get('repulsion', 0) # Use 'repulsion' for knockback
+        stun = self.stats.get('stun', 0.1)
+
+        # Create the projectile
+        projectile = Projectile(
+            position=self.rect.center, # Start from the weapon's sprite center
+            direction=direction,
+            speed=projectile_speed,
+            sprite_name=self.projectile_sprite_name,
+            damage=damage,
+            knockback=knockback,
+            stun=stun
+        )
+        game_state.projectiles.append(projectile)
+
+        # Start cooldown
+        self.cooldown_timer = self.stats.get('cooldown', 0.5)
 
     def update(self, dt, game_state):
-        super().update(dt, game_state) # Call base update for position and cooldown dot calculation
-        # Cooldown timer decrement is now handled by the base class update
-        # if self.timer > 0:
-        #     self.timer -= dt
-            
-        # Projectile updates are now handled by the main game loop via game_state.projectiles
-        # We no longer store/update projectiles within the RangeWeapon itself
-        # (This simplifies weapon switching and centralizes projectile management)
-        # for proj in self.projectiles[:]: 
-        #    ...
+        # Base update for cooldown
+        super().update(dt, game_state)
+        
+        # Aim towards mouse
+        mouse_world_pos = game_state.get_mouse_world_pos()
+        direction = mouse_world_pos - (self.owner.position + self.offset)
+        if direction.length_squared() > 0:
+             self.angle = -direction.angle_to(Vector2(1,0)) # Negate for pygame's y-down coord system
 
+        # Update position after angle is set
+        self.update_position()
+        
+    def draw(self, surface, camera):
+        if not self.idle_sprite: return # Use idle_sprite as the source
+
+        # --- Aiming Rotation --- #
+        # Rotate the original idle sprite
+        rotated_sprite = pygame.transform.rotate(self.idle_sprite, self.angle)
+        
+        # Flip based on aim direction (more intuitive for ranged)
+        # We check if the angle is pointing to the left side of the screen
+        # Angles in pygame: 0 is right, 90 is down, 180 is left, 270 is up
+        flip_horizontal = abs(self.angle) > 90
+
+        if flip_horizontal:
+            # Flip the original sprite vertically (up/down)
+            flipped_orig_sprite = pygame.transform.flip(self.idle_sprite, False, True)
+            # Then rotate it. This keeps the "top" of the gun pointing correctly.
+            final_sprite = pygame.transform.rotate(flipped_orig_sprite, self.angle)
+        else:
+            final_sprite = rotated_sprite # Use the already rotated sprite
+
+        # Create a new rect for the rotated sprite to position it correctly
+        rotated_rect = final_sprite.get_rect(center=self.rect.center)
+        
+        # Create a dummy object for camera application
+        temp_obj_for_apply = pygame.sprite.Sprite()
+        temp_obj_for_apply.rect = rotated_rect # Use the new rotated rect
+        temp_obj_for_apply.image = final_sprite
+        
+        screen_rect = camera.apply(temp_obj_for_apply)
+        
+        surface.blit(final_sprite, screen_rect.topleft)
 
 class Projectile(GameObject):
-    def __init__(self, position, direction: Vector2, speed: float, sprite_name: str, damage:float, knockback:float, stun:float):
-        # Load the sprite
-        sprite = load_sprite(sprite_name, with_alpha=True)
-        # Calculate initial velocity
-        velocity = direction.normalize() * speed
-        super().__init__(position, sprite, velocity)
+    def __init__(self, position, direction: Vector2, speed: float, sprite_name: str, damage: float, knockback: float, stun: float):
+        sprite_path = f"Weapons/RangeWeapons/bullet1"
+        sprite = load_sprite(sprite_path, with_alpha=True)
+        
+        # Rotate sprite to match direction
+        angle = degrees(atan2(-direction.y, direction.x))
+        rotated_sprite = pygame.transform.rotate(sprite, angle)
+
+        super().__init__(position, rotated_sprite, direction * speed)
+        self.rect = self.sprite.get_rect(center=self.position) # Ensure rect is centered correctly
         self.damage = damage
         self.knockback = knockback
         self.stun = stun
-        # Add a lifetime or range limit if desired
-        self.lifetime = 5.0 # seconds
+        self.lifetime = 5  # seconds
+        self.is_dead = False # Flag for removal
 
     def update(self, dt, game_state):
-        # Move the projectile
+        # Collision check with enemies should happen *before* moving
+        # This prevents the projectile from "tunneling" through an enemy on its first frame
+        for enemy in game_state.enemies:
+            if not enemy.alive:
+                continue
+            if self.rect.colliderect(enemy.rect):
+                enemy.take_damage(self.damage)
+                enemy.apply_knockback(self.velocity.normalize(), self.knockback, self.stun)
+                self.is_dead = True
+                return # A projectile hits only one enemy and disappears
+
+        # Move the projectile if no collision occurred
         self.position += self.velocity * dt
         self.rect.center = self.position
-        
-        # Decrease lifetime
+
+        # Lifetime check
         self.lifetime -= dt
         if self.lifetime <= 0:
-            self.should_be_removed = True # Mark for removal
+            self.is_dead = True
             return
 
-        # Collision check with enemies
-        for enemy in game_state.enemies:
-            if not enemy.alive: continue
-            
-            if self.rect.colliderect(enemy.rect):
-                # print(f"Projectile hit enemy {id(enemy)}") # Debug
-                enemy.take_damage(self.damage) # Apply projectile damage
-                self.should_be_removed = True # Mark projectile for removal
-                
-                # Apply Knockback & Stun
-                if self.knockback > 0 and enemy.alive:
-                    push_direction = (enemy.position - self.position).normalize() # Push away from impact point
-                    if push_direction.length_squared() == 0: # Avoid zero vector if hit dead center
-                        push_direction = (enemy.position - game_state.player.position).normalize()
-                        if push_direction.length_squared() == 0: push_direction = Vector2(1,0) # Ultimate fallback
-                    
-                    knockback_speed = self.knockback * 3 # Adjust multiplier
-                    knockback_duration = 0.15
-                    
-                    enemy.knockback_velocity = push_direction * knockback_speed
-                    enemy.knockback_timer = knockback_duration
-                    enemy.stun_timer = max(enemy.stun_timer, self.stun)
-                    enemy.knockback_recovery_timer = max(enemy.knockback_recovery_timer, knockback_duration + 0.3)
+class Pistol(RangeWeapon):
+    def __init__(self, owner, offset: Vector2 = Vector2(15, 10)):
+        stats = WEAPON_STATS['pistol']
+        idle_sprite_name = "Weapons/RangeWeapons/Pistol/pistol_idle_1"
+        projectile_sprite_name = "Weapons/RangeWeapons/bullet1"
 
-                return # Projectile hits one enemy and is removed
+        # Correctly get the stats for the projectile from the stats dict
+        stats['projectile_sprite_name'] = projectile_sprite_name
+
+        super().__init__(
+            owner=owner,
+            offset=offset,
+            stats=stats,
+            weapon_idle_sprite=idle_sprite_name,
+            projectile_sprite_name=projectile_sprite_name
+        )
+        
+        # Scale the pistol sprite by 2x
+        w, h = self.sprite.get_size()
+        self.sprite = pygame.transform.scale(self.sprite, (w * 2, h * 2))
+
+    def attack(self, target_pos: Vector2, game_state):
+        # First, perform the standard ranged attack to fire a projectile
+        super().attack(target_pos, game_state)
+
+        # Now, add an instantaneous melee-style check for point-blank targets
+        owner_pos = self.owner.position
+        direction = (target_pos - owner_pos).normalize() if (target_pos - owner_pos).length_squared() > 0 else self.owner.last_direction
+
+        range_sq = self.stats.get('close_quarters_range', 0) ** 2
+        half_arc_rad = math.radians(self.stats.get('close_quarters_arc', 0) / 2)
+
+        if range_sq == 0 or half_arc_rad == 0:
+            return # Skip if stats are not defined
+
+        for enemy in game_state.enemies:
+            if not enemy.alive:
+                continue
+
+            enemy_vec = enemy.position - owner_pos
+            if enemy_vec.length_squared() < range_sq:
+                if direction.length() > 0 and enemy_vec.length() > 0:
+                    angle_to_enemy = direction.angle_to(enemy_vec.normalize())
+                    if abs(math.radians(angle_to_enemy)) < half_arc_rad:
+                        # Apply damage and effects
+                        enemy.take_damage(self.stats.get('damage', 0))
+                        enemy.apply_knockback(direction, self.stats.get('repulsion', 0), 0.1)
+                        # We don't need a "hit_this_attack" set because it's instant
+                        # and the projectile is a separate entity.

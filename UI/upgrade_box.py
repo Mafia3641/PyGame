@@ -76,14 +76,13 @@ class UpgradeBox:
 
         # Load Icon
         try:
-            icon_path = self.data.get('icon', '')
-            if icon_path and os.path.exists(icon_path):
+            icon_path = self.data.get('icon')
+            if icon_path:
                 self.original_icon_surf = pygame.image.load(icon_path).convert_alpha() # Load into original
                 self.icon_surf = None # Reset scaled surface
             else:
                 self.original_icon_surf = None
-                self.icon_surf = None
-        except pygame.error as e:
+        except (pygame.error, FileNotFoundError):
             self.original_icon_surf = None
             self.icon_surf = None
 

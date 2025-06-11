@@ -11,7 +11,7 @@ UP = Vector2(0, -1)
 # --- UI Constants ---
 PLAY_BUTTON_POSITION = (WINDOW_WIDTH/2-50, WINDOW_HEIGHT/2)  # Approx center for 1728x972
 SETTINGS_BUTTON_POSITION = (20, 20) # Left, aligned with play
-EXIT_BUTTON_POSITION = (1628, 20) # Top-right
+EXIT_BUTTON_POSITION = (20, 100) # Top-right
 
 # --- Leveling Constants ---
 INITIAL_XP_TO_LEVEL_UP = 100

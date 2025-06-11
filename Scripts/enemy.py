@@ -4,6 +4,7 @@ import math
 from game_object import GameObject
 from utils import load_sprite
 from constants import SLIME_XP_REWARD, SLIME_BASE_HP, SLIME_BASE_DAMAGE
+import random
 
 
 class NPCLogic:
@@ -171,6 +172,26 @@ class Enemy(GameObject):
 	def die(self):
 		raise NotImplementedError("Override die() in subclass")
 
+	def apply_knockback(self, direction: Vector2, strength: float, stun_duration: float):
+		"""Applies knockback and stun to the enemy."""
+		if not self.alive: return
+
+		# Normalize direction
+		if direction.length_squared() > 0:
+			push_direction = direction.normalize()
+		else: # Fallback if direction is zero
+			push_direction = Vector2(random.uniform(-1, 1), random.uniform(-1, 1)).normalize()
+
+		knockback_speed = strength * 100 # Adjust multiplier as needed
+		knockback_duration = 0.2 # How long the push lasts
+
+		# Apply the knockback values
+		self.knockback_velocity = push_direction * knockback_speed
+		self.knockback_timer = knockback_duration
+		self.stun_timer = max(self.stun_timer, stun_duration)
+		# A recovery timer to prevent instant re-engagement
+		self.knockback_recovery_timer = max(self.knockback_recovery_timer, knockback_duration + 0.1)
+
 
 class Slime(Enemy):
 	"""
@@ -235,7 +256,9 @@ class Slime(Enemy):
 		# --- Grant XP to Player Immediately --- #
 		try:
 			if self.npc_logic and self.npc_logic.target and not self.npc_logic.target.is_dying:
-				self.npc_logic.target.gain_xp(self.xp_reward)
+				xp_to_grant = self.xp_reward * self.npc_logic.target.xp_multiplier
+				self.npc_logic.target.gain_xp(xp_to_grant)
+				self.npc_logic.target.restore_mana(10) # Restore 10 mana
 				# print(f"DEBUG: Granted {self.xp_reward} XP from Slime {id(self)} in die() method.") # Debug print
 		except AttributeError:
 			# print(f"Warning: Could not grant XP from Slime {id(self)}. Target or npc_logic missing?")

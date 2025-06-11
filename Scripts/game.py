@@ -2,6 +2,7 @@ import pygame
 import sys
 import os
 import random # Import random for upgrade selection
+from pygame.math import Vector2
 from utils import load_sprite
 from player import Player
 from constants import (
@@ -26,18 +27,25 @@ from Scripts.spawner import Spawner # Import Spawner
 # Import Upgrade related modules
 from UI.upgrade_box import UpgradeBox 
 # Import state constants from controller
-from Scripts.game_states import STATE_EXIT # Import from new file
+from Scripts.game_states import STATE_EXIT, STATE_GO_TO_MENU # Import from new file
+from Scripts.upgrades_list import get_upgrade_data, get_all_upgrade_names, UPGRADES
 from Scripts.upgrades_list import get_upgrade_data, get_all_upgrade_names, UPGRADES
 
 # Simple GameState container (can be expanded)
 class GameState:
-    def __init__(self, player, enemies, projectiles):
+    def __init__(self, player, enemies, projectiles, camera):
         self.player = player
         self.enemies = enemies
         self.projectiles = projectiles
+        self.camera = camera
+
+    def get_mouse_world_pos(self) -> Vector2:
+        """Converts current mouse screen position to world coordinates."""
+        mouse_screen_pos = pygame.mouse.get_pos()
+        return self.camera.screen_to_world(mouse_screen_pos)
 
 class Game:
-    def __init__(self):
+    def __init__(self, starting_weapon_type: str):
         # Initialization handled by GameController now
         # self._init_pygame()
         # self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -49,13 +57,13 @@ class Game:
         self.scaled_background = None # Cache for scaled background
         self.last_camera_zoom = None  # To detect zoom changes
     
-        self.player = Player(position=(400, 300))
+        self.player = Player(position=(400, 300), starting_weapon_type=starting_weapon_type)
         self.camera = Camera(WINDOW_WIDTH, WINDOW_HEIGHT)
         self.enemies = []
         self.projectiles = [] # Initialize projectile list
 
         # Create game state object
-        self.game_state = GameState(self.player, self.enemies, self.projectiles)
+        self.game_state = GameState(self.player, self.enemies, self.projectiles, self.camera)
         
         # --- Spawner --- #
         self.spawner = Spawner(self.player, self.game_state)
@@ -92,6 +100,10 @@ class Game:
         self.new_game_button_appear_timer = 0.0 # Timer for button delay
         self.new_game_button = None
         # -----------------------
+
+        # --- Win State ---
+        self.is_game_won = False
+        # -----------------
 
         # --- Upgrade State ---
         self.is_showing_upgrades = True # Show upgrades immediately
@@ -204,7 +216,7 @@ class Game:
                 0, 0, # Placeholder position
                 exit_unpressed_path,
                 exit_pressed_path,
-                callback=self._request_exit, # Use the new callback
+                callback=self._request_go_to_menu, # Use the new callback
                 scale=2.0 # Scale the button by 2x
             )
 
@@ -268,9 +280,12 @@ class Game:
                 if action:
                     # print(f"DEBUG: Game.handle_events returning action: {action}") # Add Print
                     return action # Return the action immediately
-            # If button exists but didn't handle any event, still consume events
-            # so player can't interact with the game world underneath?
-            # For now, let events pass through if button doesn't handle them.
+        # Also handle button clicks on win screen
+        if self.is_game_won and self.new_game_button:
+            for event in events:
+                action = self.new_game_button.handle_event(event)
+                if action:
+                    return action
         # -------------------------------------------------- #
         
         # --- Handle Upgrade Selection Events --- #
@@ -439,6 +454,14 @@ class Game:
             return # Skip other updates
         # -------------------------------------- #
 
+        # --- Skip updates on Win --- #
+        if self.is_game_won:
+            # Setup the button immediately if it's not there
+            if self.new_game_button is None:
+                self._setup_new_game_button()
+            return
+        # --------------------------- #
+
         # --- Pause Game if showing Upgrades --- #
         if self.is_showing_upgrades:
             # We might want some animations for the boxes later,
@@ -487,15 +510,19 @@ class Game:
              self._end_wave()
         # ----------------------------------------------- #
 
-        # --- Projectile Updates & Cleanup --- 
-        for proj in self.projectiles[:]: # Iterate copy
-            proj.update(dt, self.game_state)
-            if proj.should_be_removed:
-                self.projectiles.remove(proj)
-        # -------------------------------------
+        # --- Update all projectiles ---
+        for p in self.projectiles:
+            p.update(dt, self.game_state)
+        # ----------------------------
+
+        # --- Remove dead projectiles ---
+        self.projectiles = [p for p in self.projectiles if not getattr(p, 'is_dead', False)]
+        self.game_state.projectiles = self.projectiles # Update game state reference
+        # -----------------------------
         
     def _update_wave_intro(self, dt):
-        """Updates the timer and state for the wave intro animation."""
+        """Handles the animation and timing of the 'Wave X' intro text."""
+        if not self.is_showing_wave_intro: return
         self.wave_intro_timer += dt
         total_fade_hold_duration = WAVE_INTRO_FADE_DURATION + WAVE_INTRO_HOLD_DURATION
         total_duration = WAVE_INTRO_FADE_DURATION * 2 + WAVE_INTRO_HOLD_DURATION
@@ -528,12 +555,18 @@ class Game:
         # 2. Progress spawner to next enemy level
         self.spawner.next_wave()
         
-        # 3. Check if spawner is still active (max level not reached)
+        # 3. Check for Win Condition
+        if self.current_wave >= 5:
+            self.is_game_won = True
+            # print("--- GAME WON ---")
+            return
+
+        # 4. Check if spawner is still active (max level not reached)
         if self.spawner.is_active():
-            # 4. Restore Player HP
+            # 5. Restore Player HP
             self.player.restore_hp()
             
-            # 5. Trigger Upgrade Selection Screen
+            # 6. Trigger Upgrade Selection Screen
             self._show_upgrade_selection()
             
             # --- No longer starting wave intro here --- 
@@ -593,52 +626,37 @@ class Game:
             return random.sample(self.all_upgrade_names, available_count) 
             
     def _apply_upgrade(self, upgrade_data):
-        """Applies the stats from the chosen upgrade to the player."""
+        """Applies the stats from the chosen upgrade to the player or their weapon."""
         stats_to_apply = upgrade_data.get('stats', {})
         # print(f"Applying stats: {stats_to_apply}") # Debug
-        
+
         for stat_name, value in stats_to_apply.items():
-            # Determine the base attribute name (remove _mult suffix if present)
-            base_stat_name = stat_name.replace('_mult', '')
+            # Player stats
+            if stat_name == 'max_hp_mult':
+                self.player.max_hp *= value
+                self.player.hp = self.player.max_hp # Heal to full
+            elif stat_name == 'max_mana_mult':
+                self.player.max_mana *= value
+                self.player.current_mana = self.player.max_mana
+            elif stat_name == 'speed_mult':
+                self.player.speed *= value
+            elif stat_name == 'xp_multiplier':
+                self.player.xp_multiplier *= value
 
-            # Handle player attributes (HP, Mana, Speed, Damage, XP Multiplier etc.)
-            if hasattr(self.player, base_stat_name):
-                current_value = getattr(self.player, base_stat_name)
-                
-                if "mult" in stat_name:
-                    new_value = current_value * value
-                    # print(f"  Applying mult {stat_name}: {current_value} -> {new_value}")
-                elif stat_name == 'xp_multiplier': # Handle XP multiplier specifically
-                    # Assuming xp_multiplier modifies the base value itself
-                    new_value = current_value * (1 + value) # Example: current=1, value=0.1 -> new=1.1
-                    # print(f"  Applying {stat_name}: {current_value} -> {new_value}")
-                else: # Assume additive if not multiplier
-                    new_value = current_value + value
-                    # print(f"  Applying add {stat_name}: {current_value} -> {new_value}")
-                    
-                setattr(self.player, base_stat_name, new_value)
-
-                # --- Special Cases AFTER applying the stat change ---
-                # Restore current HP/Mana if max increased
-                if base_stat_name == 'max_hp':
-                    self.player.hp = self.player.max_hp
-                elif base_stat_name == 'max_mana':
-                    self.player.current_mana = self.player.max_mana
-                # ----------------------------------------------------
-                    
-            # Handle weapon-specific stats
-            elif stat_name == 'attack_cooldown_mult':
-                 if self.player.active_weapon and 'cooldown' in self.player.active_weapon.stats:
-                     current_cooldown = self.player.active_weapon.stats['cooldown']
-                     self.player.active_weapon.stats['cooldown'] *= value
-                     # print(f"  Applied attack_cooldown_mult: {current_cooldown} -> {self.player.active_weapon.stats['cooldown']}")
-                 else:
-                    # print(f"  Warning: Player weapon or cooldown stat not found for {stat_name}")
+            # Weapon stats
+            elif hasattr(self.player.active_weapon, 'stats'):
+                weapon_stats = self.player.active_weapon.stats
+                if stat_name == 'damage_mult':
+                    if 'damage' in weapon_stats:
+                        weapon_stats['damage'] *= value
+                elif stat_name == 'attack_cooldown_mult':
+                    if 'cooldown' in weapon_stats:
+                        weapon_stats['cooldown'] *= value
+                else:
+                    # print(f"Warning: Unhandled weapon stat '{stat_name}'")
                     pass
-            
-            # Handle other potential stats or log unknown ones
             else:
-                # print(f"  Warning: Player/Weapon attribute '{stat_name}' (base: '{base_stat_name}') not found or handled.")
+                # print(f"Warning: Unhandled stat '{stat_name}'")
                 pass
                 
     def _start_next_wave_intro(self):
@@ -649,9 +667,9 @@ class Game:
         self.wave_intro_timer = 0.0
         self.wave_intro_stage = 'fade_in'
     
-    def _request_exit(self):
-        """Signals the controller to exit the game."""
-        return STATE_EXIT # Defined in controller.py
+    def _request_go_to_menu(self):
+        """Signals the controller to return to the main menu."""
+        return STATE_GO_TO_MENU
     
     # Renamed _draw to draw, takes surface
     def draw(self, surface):
@@ -721,6 +739,13 @@ class Game:
                 # print(f"DEBUG: Drawing new_game_button at {self.new_game_button.rect.topleft}") # Add Print
                 self.new_game_button.draw(surface)
         # ------------------------------------------------ #
+
+        # --- Draw Win Screen ---
+        if self.is_game_won:
+            self._draw_win_screen(surface)
+            if self.new_game_button:
+                self.new_game_button.draw(surface)
+        # -----------------------
 
         # --- Draw Upgrade Boxes (If active, drawn on top) ---
         if self.is_showing_upgrades:
@@ -1003,6 +1028,24 @@ class Game:
             pass
         except AttributeError as e:
             # print(f"Error accessing game over font (likely not loaded yet): {e}")
+            pass
+
+    def _draw_win_screen(self, surface):
+        """Draws the WIN! text."""
+        try:
+            # Reuse game_over_font for simplicity, or create a new one
+            if self.game_over_font is None:
+                self.game_over_font = pygame.font.Font(None, GAME_OVER_MAX_FONT_SIZE) 
+                
+            text_surface = self.game_over_font.render("WIN!", True, (255, 215, 0)) # Gold color
+            
+            # Center the text on the screen
+            screen_rect = surface.get_rect()
+            text_rect = text_surface.get_rect(center=screen_rect.center)
+            
+            surface.blit(text_surface, text_rect)
+        except pygame.error as e:
+            # print(f"Error rendering WIN! text: {e}")
             pass
 
     def _setup_new_game_button(self):

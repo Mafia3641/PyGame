@@ -5,16 +5,16 @@ UPGRADES = {
     'hp_boost_1': {
         'title': "Vitality Boost",
         'description': "Slightly increases your maximum health.",
-        'icon': "Sprites/Upgrades/Upgrade_icons/heart.png",
-        'stats': {'max_hp_mult': 1.20},
-        'stats_message': ["+20% Max HP"]
+        'icon': "Sprites/Upgrades/Upgrade_icons/upgrade_health.png",
+        'stats': {'max_hp_mult': 1.25},
+        'stats_message': ["+25% Max HP"]
     },
     'damage_boost_1': {
         'title': "Sharpened Edge",
         'description': "Increases your base weapon damage.",
         'icon': "Sprites/Upgrades/Upgrade_icons/upgrade_physical_damage.png",
-        'stats': {'damage_mult': 1.20},
-        'stats_message': ["+20% Damage"]
+        'stats': {'damage_mult': 1.15},
+        'stats_message': ["+15% Damage"]
     },
     'speed_boost_1': {
         'title': "Fleet Footed",
@@ -26,17 +26,17 @@ UPGRADES = {
     'xp_gain_boost_1': {
         'title': "Quick Learner",
         'description': "Gain slightly more experience from defeating enemies.",
-        'icon': "Sprites/Upgrades/Upgrade_icons/book.png",
-        'stats': {'xp_multiplier': 0.1},
-        'stats_message': ["+10% XP Gain"]
+        'icon': "Sprites/Upgrades/Upgrade_icons/upgrade_income.png",
+        'stats': {'xp_multiplier': 1.25},
+        'stats_message': ["+25% XP Gain"]
     },
      'attack_speed_boost_1': {
         'title': "Rapid Strikes",
         'description': "Increases your attack speed slightly.",
-        'icon': "Sprites/Upgrades/Upgrade_icons/glove.png", 
+        'icon': "Sprites/Upgrades/Upgrade_icons/upgrade_attack_speed.png", 
         # Needs modification in Weapon stats, e.g., decreasing cooldown
-        'stats': {'attack_cooldown_mult': 0.95},
-        'stats_message': ["+5% Attack Speed"]
+        'stats': {'attack_cooldown_mult': 0.70},
+        'stats_message': ["+30% Attack Speed"]
     },
     'max_mana_boost_1': {
         'title': "Arcane Reserves",

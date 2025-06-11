@@ -3,7 +3,7 @@ from pygame.math import Vector2
 from utils import load_sprite
 from constants import (SPEED, BASE_DAMAGE, INITIAL_XP_TO_LEVEL_UP, XP_LEVEL_MULTIPLIER, 
                      BASE_MAX_MANA, BASE_PLAYER_HP)
-from weapon import MeleeWeapon, RangeWeapon
+from weapon import MeleeWeapon, RangeWeapon, Pistol
 from game_object import GameObject
 from weapon_stats import WEAPON_STATS
 from camera import Camera
@@ -11,7 +11,7 @@ from camera import Camera
 
 class Player(GameObject):
 	
-	def __init__(self, position: tuple):
+	def __init__(self, position: tuple, starting_weapon_type: str):
 		self.direction = Vector2(0, 0)
 		self.speed = SPEED
 		self.damage = BASE_DAMAGE
@@ -27,6 +27,7 @@ class Player(GameObject):
 		self.current_level = 1
 		self.current_xp = 0
 		self.xp_for_next_level = INITIAL_XP_TO_LEVEL_UP
+		self.xp_multiplier = 1.0 # Multiplier for XP gain
 		# -------------------------
 
 		self.idle_sprites = [
@@ -64,7 +65,13 @@ class Player(GameObject):
 		super().__init__(position, self.idle_sprites[0], Vector2(0))
 
 		self.active_weapon = None
-		self.pickup_weapon('starter_sword')
+		if starting_weapon_type == 'melee':
+			self.pickup_weapon('starter_sword')
+		elif starting_weapon_type == 'ranged':
+			self.pickup_weapon('staff')
+		else:
+			# Fallback or error
+			self.pickup_weapon('pistol') # Or raise an error
 	
 	def pickup_weapon(self, weapon_name: str):
 		if weapon_name not in WEAPON_STATS:
@@ -73,6 +80,11 @@ class Player(GameObject):
 		stats = WEAPON_STATS[weapon_name].copy() # Get a copy of stats
 		weapon_type = stats.get('type')
 		
+		# Special case for pistol for now
+		if weapon_name == 'pistol':
+			self.active_weapon = Pistol(owner=self)
+			return
+
 		# Common args for both types
 		common_args = {
 			'owner': self,
@@ -151,6 +163,17 @@ class Player(GameObject):
 		# self.hp = self.max_hp # Heal on level up?
 		# self.damage += 5
 	# ------------------------
+
+	def consume_mana(self, amount):
+		if self.current_mana >= amount:
+			self.current_mana -= amount
+			return True
+		return False
+
+	def restore_mana(self, amount):
+		self.current_mana += amount
+		if self.current_mana > self.max_mana:
+			self.current_mana = self.max_mana
 
 	def restore_hp(self):
 		"""Restores player HP to maximum."""
