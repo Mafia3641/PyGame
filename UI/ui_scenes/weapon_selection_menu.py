@@ -60,4 +60,4 @@ class WeaponSelectionMenu:
             button.draw(surface)
             
     def set_audio_manager(self, audio_manager):
-        self.audio_manager = audio_manager 
+        self.audio_manager = audio_manager

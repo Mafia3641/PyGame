@@ -1,5 +1,3 @@
-# Dictionary of available upgrades
-# Keys are unique identifiers, values are dictionaries with upgrade details.
 
 UPGRADES = {
     'hp_boost_1': {
@@ -33,8 +31,7 @@ UPGRADES = {
      'attack_speed_boost_1': {
         'title': "Rapid Strikes",
         'description': "Increases your attack speed slightly.",
-        'icon': "Sprites/Upgrades/Upgrade_icons/upgrade_attack_speed.png", 
-        # Needs modification in Weapon stats, e.g., decreasing cooldown
+        'icon': "Sprites/Upgrades/Upgrade_icons/upgrade_attack_speed.png",
         'stats': {'attack_cooldown_mult': 0.70},
         'stats_message': ["+30% Attack Speed"]
     },
@@ -48,11 +45,11 @@ UPGRADES = {
 }
 
 def get_upgrade_data(upgrade_name):
-    """Safely retrieves upgrade data by name."""
+    
     return UPGRADES.get(upgrade_name)
 
 def get_all_upgrade_names():
-    """Returns a list of all available upgrade names."""
+    
     return list(UPGRADES.keys())
 
 

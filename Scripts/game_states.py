@@ -4,4 +4,4 @@ STATE_GAMEPLAY = 'gameplay'
 STATE_EXIT = 'exit'
 STATE_NEW_GAME = "new_game"
 STATE_GO_TO_MENU = "go_to_menu"
-STATE_WEAPON_SELECTION = "weapon_selection" 
+STATE_WEAPON_SELECTION = "weapon_selection"
