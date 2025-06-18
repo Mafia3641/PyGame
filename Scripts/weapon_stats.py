@@ -20,7 +20,8 @@ WEAPON_STATS = {
     },
     'pistol': {
         'type': 'range',
-        'offset': [5, 5], 
+        'offset': [15, 10],
+        'scale': 2,
         'weapon_idle_sprite': "Weapons/RangeWeapons/Pistol/pistol_idle", # Corrected key name
         'projectile_speed': 600,
         'projectile_sprite_name': "Weapons/bullet",

@@ -68,7 +68,7 @@ class Player(GameObject):
 		if starting_weapon_type == 'melee':
 			self.pickup_weapon('starter_sword')
 		elif starting_weapon_type == 'ranged':
-			self.pickup_weapon('staff')
+			self.pickup_weapon('pistol')
 		else:
 			# Fallback or error
 			self.pickup_weapon('pistol') # Or raise an error

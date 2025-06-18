@@ -298,27 +298,41 @@ class RangeWeapon(Weapon):
         self,
         owner,
         offset: Vector2,
-        stats: dict, # Use stats dict
-        weapon_idle_sprite: str, # Keep sprite names separate for now
+        stats: dict,
+        weapon_idle_sprite: str,
         projectile_sprite_name: str,
     ):
         super().__init__(owner, offset, stats)
         # Load sprites
         self.idle_sprite = load_sprite(weapon_idle_sprite, with_alpha=True)
+        
+        # Scale the sprite if scale is specified in stats
+        scale = self.stats.get('scale', 1)
+        if scale != 1:
+            w, h = self.idle_sprite.get_size()
+            self.idle_sprite = pygame.transform.scale(self.idle_sprite, (w * scale, h * scale))
+            
         self.sprite = self.idle_sprite
         self.projectile_sprite_name = projectile_sprite_name
         self.angle = 0 # For aiming visual
+        self.facing_left = False # Track facing direction
 
     def update_position(self):
         if not self.sprite: return
 
+        # Get the owner's center position
         anchor_pos = Vector2(self.owner.rect.center)
         
-        # We don't use horizontal flip for ranged aiming, aiming is done with rotation
-        target_weapon_center = anchor_pos + self.offset.rotate(-self.angle)
+        # Adjust offset based on owner's direction
+        adjusted_offset = self.offset.copy()
+        if self.owner.last_direction.x < 0:  # Если персонаж смотрит влево
+            adjusted_offset.x -= 17  # Сдвигаем пистолет на 10 пикселей влево
         
-        # Use the idle_sprite for the rect calculation to have a consistent size before rotation
-        self.rect = self.idle_sprite.get_rect(center=target_weapon_center)
+        # Calculate the weapon's position relative to the owner
+        weapon_pos = anchor_pos + adjusted_offset
+        
+        # Update the rect position
+        self.rect = self.idle_sprite.get_rect(center=weapon_pos)
 
     def attack(self, target_pos: Vector2, game_state):
         if self.cooldown_timer > 0:
@@ -377,42 +391,45 @@ class RangeWeapon(Weapon):
         mouse_world_pos = game_state.get_mouse_world_pos()
         direction = mouse_world_pos - (self.owner.position + self.offset)
         if direction.length_squared() > 0:
-             self.angle = -direction.angle_to(Vector2(1,0)) # Negate for pygame's y-down coord system
+            self.angle = direction.angle_to(Vector2(1,0))
+            # Update facing direction based on mouse position
+            self.facing_left = mouse_world_pos.x < self.owner.position.x
 
         # Update position after angle is set
         self.update_position()
-        
+
     def draw(self, surface, camera):
-        if not self.idle_sprite: return # Use idle_sprite as the source
+        if not self.idle_sprite: return
 
-        # --- Aiming Rotation --- #
-        # Rotate the original idle sprite
-        rotated_sprite = pygame.transform.rotate(self.idle_sprite, self.angle)
+        # Get the weapon's position in world coordinates
+        weapon_world_pos = Vector2(self.rect.center)
         
-        # Flip based on aim direction (more intuitive for ranged)
-        # We check if the angle is pointing to the left side of the screen
-        # Angles in pygame: 0 is right, 90 is down, 180 is left, 270 is up
-        flip_horizontal = abs(self.angle) > 90
-
-        if flip_horizontal:
-            # Flip the original sprite vertically (up/down)
-            flipped_orig_sprite = pygame.transform.flip(self.idle_sprite, False, True)
-            # Then rotate it. This keeps the "top" of the gun pointing correctly.
-            final_sprite = pygame.transform.rotate(flipped_orig_sprite, self.angle)
+        # Base sprite
+        sprite_to_rotate = self.idle_sprite
+        
+        # If facing left, flip the sprite horizontally before rotation
+        if self.facing_left:
+            sprite_to_rotate = pygame.transform.flip(self.idle_sprite, True, False)
+            draw_angle = self.angle + 180 if self.angle > 0 else self.angle - 180
         else:
-            final_sprite = rotated_sprite # Use the already rotated sprite
-
-        # Create a new rect for the rotated sprite to position it correctly
-        rotated_rect = final_sprite.get_rect(center=self.rect.center)
+            draw_angle = self.angle
+        
+        # Rotate the sprite
+        rotated_sprite = pygame.transform.rotate(sprite_to_rotate, draw_angle)
+        
+        # Get the offset between the sprite center and rotation point
+        rotated_rect = rotated_sprite.get_rect(center=weapon_world_pos)
         
         # Create a dummy object for camera application
         temp_obj_for_apply = pygame.sprite.Sprite()
-        temp_obj_for_apply.rect = rotated_rect # Use the new rotated rect
-        temp_obj_for_apply.image = final_sprite
+        temp_obj_for_apply.rect = rotated_rect
+        temp_obj_for_apply.image = rotated_sprite
         
+        # Get the screen position
         screen_rect = camera.apply(temp_obj_for_apply)
         
-        surface.blit(final_sprite, screen_rect.topleft)
+        # Draw the weapon
+        surface.blit(rotated_sprite, screen_rect.topleft)
 
 class Projectile(GameObject):
     def __init__(self, position, direction: Vector2, speed: float, sprite_name: str, damage: float, knockback: float, stun: float):
@@ -469,10 +486,6 @@ class Pistol(RangeWeapon):
             weapon_idle_sprite=idle_sprite_name,
             projectile_sprite_name=projectile_sprite_name
         )
-        
-        # Scale the pistol sprite by 2x
-        w, h = self.sprite.get_size()
-        self.sprite = pygame.transform.scale(self.sprite, (w * 2, h * 2))
 
     def attack(self, target_pos: Vector2, game_state):
         # First, perform the standard ranged attack to fire a projectile
