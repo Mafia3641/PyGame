@@ -50,15 +50,34 @@ This is an example, how to clone this repository and lanch the game locally
   ```
 ### Installing requirements
 
-- using git:
+- Recommended to use virtual environment
+  1) Create venv (named .venv)
   ```sh
-  git install requirements.txt
+  python -m venv .venv
   ```
+  
+  2) Open venv
+  ```sh
+  .\.venv\Scripts\activate
+  ```
+  
+- Open project directory
+  ```sh
+  cd PyGame
+  ```
+  
+- Install dependences:
+  ```sh
+  git install -r requirements.txt
+  ```
+
 ## Usage
 
 To run, use the standard methods of running your editor's scripts (run main.py ).
-
-
+```sh
+  python Scripts\main.py
+  ```
+Or using IDE
 <img src="https://shultais.education/media/blog/python_for_beginners/install_pycharm_windows/run-main.png">
 
 
@@ -69,21 +88,22 @@ To run, use the standard methods of running your editor's scripts (run main.py )
 - [x] Add enemies with logic
 - [x] Edit sprites, create anims
 - [x] Add zoom functionality
-- [ ] Add battle system
+- [x] Add battle system
   - [x] Add weapon stats
   - [x] Add enemy repulsion
-  - [ ] Weapon sprites
-  - [ ] HP reduction, regeneration
-  - [ ] Attack sprites
-  - [ ] Connect attack signals
-- [ ] Add upgrading system
-  - [ ] Weapon upgrades
-  - [ ] Ability upgrades
-- [ ] Main menu, pause, end screen
+  - [x] Weapon sprites
+  - [x] HP reduction, regeneration
+  - [x] Attack sprites
+  - [x] Connect attack signals
+- [x] Add upgrading system
+  - [x] Weapon upgrades
+  - [x] Ability upgrades
+- [x] Main menu, pause, end screen
+- [x] Audio and video manager
+
 
 ## Contact
 
 Telegram - [click](https://t.me/@Bart3641)
-
 Project Link: [click](https://github.com/Mafia3641/MyGame)
 
