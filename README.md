@@ -74,10 +74,14 @@ This is an example, how to clone this repository and lanch the game locally
 ## Usage
 
 To run, use the standard methods of running your editor's scripts (run main.py ).
+
+- Using cmd (in the same window):
 ```sh
   python Scripts\main.py
   ```
-Or using IDE
+
+- Or using IDE (dont forget to activate venv in editor's terminal):
+
 <img src="https://shultais.education/media/blog/python_for_beginners/install_pycharm_windows/run-main.png">
 
 
