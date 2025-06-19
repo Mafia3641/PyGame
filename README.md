@@ -9,7 +9,6 @@
 My first game made by using pygame only!
 <br/>
 <br/>
-<a href="https://github.com/ShaanCoding/ReadME-Generator/"><strong>Explore the docs »</strong></a>
 <br/>
 <br/>
 
