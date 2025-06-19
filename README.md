@@ -109,5 +109,5 @@ To run, use the standard methods of running your editor's scripts (run main.py )
 ## Contact
 
 Telegram - [click](https://t.me/@Bart3641)
-Project Link: [click](https://github.com/Mafia3641/MyGame)
+
 
