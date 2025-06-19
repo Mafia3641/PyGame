@@ -1,14 +1,16 @@
 import pygame
 from pygame.math import Vector2
 import math
+import random
+
 from game_object import GameObject
 from utils import load_sprite
-import random
 from weapon_stats import WEAPON_STATS
 from math import atan2, degrees
 from constants import WINDOW_WIDTH, WINDOW_HEIGHT
 
 class Weapon:
+    """Общий класс для управления оружием"""
     def __init__(self, owner, offset: Vector2, stats: dict):
         self.owner = owner
         self.offset = Vector2(offset)
@@ -24,6 +26,7 @@ class Weapon:
         self.dot_sprite = None
         self._load_dot_sprite()
 
+    # Загрузка спрайта для точек на экране
     def _load_dot_sprite(self):
         try:
             dot_path = "UI/ui_sprites/dot.png"
@@ -33,6 +36,7 @@ class Weapon:
         except FileNotFoundError:
             self.dot_sprite = None
 
+    # Обновление позиции оружия
     def update_position(self):
         if not self.sprite: return
         
@@ -49,11 +53,13 @@ class Weapon:
         self.rect.center = target_weapon_center
 
     def update(self, dt, game_state):
+        """Обновление состояния оружия"""
         if self.cooldown_timer > 0:
             self.cooldown_timer -= dt
             if self.cooldown_timer < 0:
                 self.cooldown_timer = 0
 
+        # Расчет количества точек на экране
         total_cooldown = self.stats.get('cooldown', 0.0)
         calculated_dots = 0
         if total_cooldown <= 0 or self.cooldown_timer <= 0:
@@ -73,6 +79,7 @@ class Weapon:
                 
         self.cooldown_dots = calculated_dots
 
+        # Обновление направления оружия
         if hasattr(self.owner, 'last_direction'):
             self.last_direction = self.owner.last_direction.copy()
         
@@ -88,6 +95,7 @@ class Weapon:
             self.update_position()
 
     def draw(self, surface, camera):
+        """Отрисовка оружия"""
         if not self.sprite: return
 
         flip_horizontal = self.owner.last_direction.x < 0
@@ -105,15 +113,16 @@ class Weapon:
         surface.blit(final_sprite, screen_rect.topleft)
 
     def get_cooldown_dots(self):
-        
+        """Получение количества точек на экране"""
         return self.cooldown_dots, self.dot_sprite
 
     def attack(self, target_pos: Vector2, game_state):
-        
+        """Атака оружием"""
         raise NotImplementedError("Subclasses must implement the attack method")
 
 
 class MeleeWeapon(Weapon):
+    """Класс для управления ближним оружием"""
     def __init__(
         self,
         owner,
@@ -144,6 +153,7 @@ class MeleeWeapon(Weapon):
         self.current_attack_direction = Vector2(1, 0)
     
     def update_position(self):
+        """Обновление позиции оружия"""
         if not self.sprite: return
         
         anchor_pos = Vector2(self.owner.rect.center)
@@ -163,6 +173,7 @@ class MeleeWeapon(Weapon):
         self.rect.center = target_weapon_center
 
     def attack(self, target_pos: Vector2, game_state):
+        """Атака оружием"""
         if not self.attacking and self.cooldown_timer <= 0:
             self.attacking = True
             self.frame_index = 0
@@ -185,6 +196,7 @@ class MeleeWeapon(Weapon):
             self.cooldown_timer = self.stats.get('cooldown', 0.5)
 
     def update(self, dt, game_state):
+        """Обновление состояния оружия"""
         super().update(dt, game_state)
         
         if self.sprite:
@@ -213,13 +225,20 @@ class MeleeWeapon(Weapon):
                     if enemy not in self.hit_enemies_this_attack:
                         if not enemy.alive:
                             continue
+                        # Расчет расстояния до врага
                         enemy_vec = enemy.position - owner_pos
                         if enemy_vec.length_squared() < attack_range_sq:
+                            # Расчет угла между направлением атаки и направлением к врагу
                             if attack_direction.length() > 0 and enemy_vec.length() > 0:
+                                # Расчет угла между направлением атаки и направлением к врагу
                                 angle_between = attack_direction.angle_to(enemy_vec)
+                                # Проверка, находится ли враг в зоне атаки
                                 if abs(angle_between) <= math.degrees(self.half_arc_rad):
+                                    # Нанесение урона врагу
                                     enemy.take_damage(self.stats.get('damage', 0))
+                                    # Применение отталкивания врагу
                                     enemy.apply_knockback(attack_direction, self.stats.get('repulsion', 0), 0.1)
+                                    # Добавление врага в список врагов, которых атаковал оружие
                                     self.hit_enemies_this_attack.add(enemy)
 
         else:
@@ -228,6 +247,7 @@ class MeleeWeapon(Weapon):
 
 
 class RangeWeapon(Weapon):
+    """Класс для управления дальним оружием"""
     def __init__(
         self,
         owner,
@@ -250,6 +270,7 @@ class RangeWeapon(Weapon):
         self.facing_left = False
 
     def update_position(self):
+        """Обновление позиции оружия"""
         if not self.sprite: return
 
         anchor_pos = Vector2(self.owner.rect.center)
@@ -263,6 +284,7 @@ class RangeWeapon(Weapon):
         self.rect = self.idle_sprite.get_rect(center=weapon_pos)
 
     def attack(self, target_pos: Vector2, game_state):
+        """Атака оружием"""
         if self.cooldown_timer > 0:
             return
 
@@ -303,6 +325,7 @@ class RangeWeapon(Weapon):
         self.cooldown_timer = self.stats.get('cooldown', 0.5)
 
     def update(self, dt, game_state):
+        """Обновление состояния оружия"""
         super().update(dt, game_state)
         
         mouse_world_pos = game_state.get_mouse_world_pos()
@@ -314,6 +337,7 @@ class RangeWeapon(Weapon):
         self.update_position()
 
     def draw(self, surface, camera):
+        """Отрисовка оружия"""
         if not self.idle_sprite: return
 
         weapon_world_pos = Vector2(self.rect.center)
@@ -339,6 +363,7 @@ class RangeWeapon(Weapon):
         surface.blit(rotated_sprite, screen_rect.topleft)
 
 class Projectile(GameObject):
+    """Класс для управления снарядами"""
     def __init__(self, position, direction: Vector2, speed: float, sprite_name: str, damage: float, knockback: float, stun: float):
         sprite_path = f"Weapons/RangeWeapons/bullet1"
         sprite = load_sprite(sprite_path, with_alpha=True)
@@ -355,6 +380,7 @@ class Projectile(GameObject):
         self.is_dead = False
 
     def update(self, dt, game_state):
+        """Обновление состояния снаряда"""
         for enemy in game_state.enemies:
             if not enemy.alive:
                 continue
@@ -373,6 +399,7 @@ class Projectile(GameObject):
             return
 
 class Pistol(RangeWeapon):
+    """Класс для управления пистолетом"""
     def __init__(self, owner, offset: Vector2 = Vector2(15, 10)):
         stats = WEAPON_STATS['pistol']
         idle_sprite_name = "Weapons/RangeWeapons/Pistol/pistol_idle_1"
@@ -389,25 +416,30 @@ class Pistol(RangeWeapon):
         )
 
     def attack(self, target_pos: Vector2, game_state):
+        """Атака оружием"""
         super().attack(target_pos, game_state)
 
         owner_pos = self.owner.position
         direction = (target_pos - owner_pos).normalize() if (target_pos - owner_pos).length_squared() > 0 else self.owner.last_direction
 
+        # Расчет расстояния до врага
         range_sq = self.stats.get('close_quarters_range', 0) ** 2
         half_arc_rad = math.radians(self.stats.get('close_quarters_arc', 0) / 2)
 
         if range_sq == 0 or half_arc_rad == 0:
             return
 
+        # Проверка, находится ли враг в зоне атаки
         for enemy in game_state.enemies:
             if not enemy.alive:
                 continue
-
+            # Расчет расстояния до врага
             enemy_vec = enemy.position - owner_pos
             if enemy_vec.length_squared() < range_sq:
+                # Расчет угла между направлением атаки и направлением к врагу
                 if direction.length() > 0 and enemy_vec.length() > 0:
                     angle_to_enemy = direction.angle_to(enemy_vec.normalize())
+                    # Проверка, находится ли враг в зоне атаки
                     if abs(math.radians(angle_to_enemy)) < half_arc_rad:
                         enemy.take_damage(self.stats.get('damage', 0))
                         enemy.apply_knockback(direction, self.stats.get('repulsion', 0), 0.1)

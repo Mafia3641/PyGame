@@ -3,6 +3,7 @@ import os
 import pygame
 
 def load_sprite(name, with_alpha=True):
+	"""Модуль для загрузки спрайтов"""
 	base_path = os.path.dirname(os.path.abspath(__file__))
 	sprite_path = os.path.join(base_path, "..", "Sprites", f"{name}.png")
 	sprite_path = os.path.normpath(sprite_path)

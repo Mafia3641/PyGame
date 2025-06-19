@@ -1,11 +1,12 @@
 import pygame
-import os
 from UI.button import Button
 from Scripts.constants import WINDOW_WIDTH, WINDOW_HEIGHT
 
 ACTION_CLOSE_SETTINGS = 'close_settings'
 
+
 class SettingsMenu:
+    """Класс для управления меню настроек"""
     def __init__(self):
         self.background_color = (30, 30, 50)
         
@@ -26,9 +27,11 @@ class SettingsMenu:
         self._center_elements()
         
     def set_audio_manager(self, audio_manager):
+        """Установка менеджера звука"""
         self.audio_manager = audio_manager
         
     def _setup_return_button(self):
+        """Настройка кнопки возврата"""
         try:
             return_unpressed = "UI/ui_sprites/close_button_unpressed.png"
             return_pressed = "UI/ui_sprites/close_button_pressed.png"
@@ -45,6 +48,7 @@ class SettingsMenu:
             self.return_button = None
             
     def _center_elements(self):
+        """Центрирование элементов"""
         self.title_rect = self.title_text.get_rect(
             centerx=WINDOW_WIDTH // 2,
             top=50
@@ -63,15 +67,19 @@ class SettingsMenu:
             self.return_button.rect.bottom = WINDOW_HEIGHT - 50
             
     def _on_return_click(self):
+        """Обработка нажатия на кнопку возврата"""
         return ACTION_CLOSE_SETTINGS
         
     def handle_events(self, events):
+        """Обработка событий"""
         for event in events:
+            # Обработка событий для кнопки возврата
             if self.return_button:
                 action = self.return_button.handle_event(event)
                 if action:
                     return action
                     
+            # Обработка событий для слайдера громкости
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                     handle_pos = (
@@ -100,17 +108,23 @@ class SettingsMenu:
         return None
         
     def update(self, dt):
+        """Обновление состояния меню"""
         pass
         
     def draw(self, surface):
+        """Отрисовка меню"""
         surface.fill(self.background_color)
         
+        # Отрисовка заголовка
         surface.blit(self.title_text, self.title_rect)
         
+        # Отрисовка подписи для слайдера громкости
         surface.blit(self.volume_label, self.volume_label_rect)
         
+        # Отрисовка слайдера громкости
         pygame.draw.rect(surface, (100, 100, 100), self.slider_rect)
         
+        # Отрисовка заполненной части слайдера
         if self.audio_manager:
             filled_rect = pygame.Rect(
                 self.slider_rect.left,
@@ -120,6 +134,7 @@ class SettingsMenu:
             )
             pygame.draw.rect(surface, (200, 200, 200), filled_rect)
         
+            # Расчет позиции ручки слайдера
             handle_pos = (
                 self.slider_rect.left + self.audio_manager.get_volume() * self.slider_rect.width,
                 self.slider_rect.centery

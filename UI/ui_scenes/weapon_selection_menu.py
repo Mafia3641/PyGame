@@ -5,7 +5,9 @@ from Scripts.constants import WINDOW_WIDTH, WINDOW_HEIGHT
 ACTION_START_MELEE = 'start_melee'
 ACTION_START_RANGED = 'start_ranged'
 
+
 class WeaponSelectionMenu:
+    """Класс для управления меню выбора оружия"""
     def __init__(self):
         self._setup_buttons()
         self.title_font = pygame.font.Font(None, 74)
@@ -14,6 +16,7 @@ class WeaponSelectionMenu:
         self.audio_manager = None
 
     def _setup_buttons(self):
+        """Настройка кнопок"""
         melee_button_pos = (WINDOW_WIDTH * 0.3, WINDOW_HEIGHT / 2)
         ranged_button_pos = (WINDOW_WIDTH * 0.7, WINDOW_HEIGHT / 2)
 
@@ -43,7 +46,9 @@ class WeaponSelectionMenu:
         self.buttons = [self.melee_button, self.ranged_button]
 
     def handle_events(self, events):
+        """Обработка событий"""
         for event in events:
+            # Обработка событий для каждой кнопки
             for button in self.buttons:
                 action = button.handle_event(event)
                 if action:
@@ -51,13 +56,18 @@ class WeaponSelectionMenu:
         return None
 
     def update(self, dt):
+        """Обновление состояния меню"""
         pass
 
     def draw(self, surface):
+        """Отрисовка меню"""
         surface.fill((30, 30, 50))
+        # Отрисовка заголовка
         surface.blit(self.title_surf, self.title_rect)
+        # Отрисовка кнопок
         for button in self.buttons:
             button.draw(surface)
             
-    def set_audio_manager(self, audio_manager):
+    def set_audio_manager(self, audio_manager): 
+        """Установка менеджера звука"""
         self.audio_manager = audio_manager

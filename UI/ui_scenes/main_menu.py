@@ -16,7 +16,9 @@ except ImportError:
     print("Warning: OpenCV library (cv2) not found. Video background disabled. Install with 'pip install opencv-python'")
     OPENCV_AVAILABLE = False
 
+
 class MainMenu:
+    """Класс для управления главным меню игры"""
     def __init__(self):
         self.background_color = (255, 255, 255)
         self.buttons = []
@@ -40,9 +42,11 @@ class MainMenu:
                 self.video_capture = None
 
     def set_audio_manager(self, audio_manager):
+        """Установка менеджера звука"""
         self.audio_manager = audio_manager
 
     def _setup_buttons(self):
+        """Настройка кнопок меню"""
         def start_game_callback():
             return ACTION_START_GAME
         
@@ -51,9 +55,11 @@ class MainMenu:
 
         def exit_callback():
             return ACTION_EXIT
-            
+        
+        # Масштаб кнопок
         button_scale = 2.0
 
+        # Загрузка спрайтов для кнопок
         start_unpressed = "UI/ui_sprites/play_button_unpressed.png"
         start_pressed = "UI/ui_sprites/play_button_pressed.png"
         settings_unpressed = "UI/ui_sprites/settings_button_unpressed.png"
@@ -61,6 +67,7 @@ class MainMenu:
         exit_unpressed = "UI/ui_sprites/close_button_unpressed.png"
         exit_pressed = "UI/ui_sprites/close_button_pressed.png"
 
+        # Создание кнопок
         try:
             self.start_button = Button(
                 PLAY_BUTTON_POSITION[0], PLAY_BUTTON_POSITION[1],
@@ -85,8 +92,10 @@ class MainMenu:
         self.buttons.extend([self.start_button, self.settings_button, self.exit_button])
 
     def handle_events(self, events):
+        """Обработка событий"""
         action_taken = None
         for event in events:
+            # Обработка событий для каждой кнопки
             for button in self.buttons:
                 action = button.handle_event(event)
                 if action:
@@ -97,15 +106,18 @@ class MainMenu:
         return action_taken
 
     def update(self, dt):
-
+        """Обновление состояния меню"""
         if self.video_capture:
+            # Чтение кадра из видео
             success, frame = self.video_capture.read()
 
+            # Если кадр не прочитан, то сбрасываем кадр на начало и пытаемся прочитать его снова
             if not success:
                 self.video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 success, frame = self.video_capture.read()
 
             try:
+                # Если кадр прочитан, то масштабируем его и преобразуем в RGB
                 if success:
                     frame_h, frame_w = frame.shape[:2]
                     window_w, window_h = int(WINDOW_WIDTH), int(WINDOW_HEIGHT)
@@ -135,6 +147,7 @@ class MainMenu:
                     self.video_capture.release()
 
     def draw(self, surface):
+        """Отрисовка меню"""
         if self.current_frame_surface:
             frame_rect = self.current_frame_surface.get_rect()
             screen_rect = surface.get_rect()
@@ -144,5 +157,6 @@ class MainMenu:
         else:
             surface.fill((30, 30, 50))
 
+        # Отрисовка кнопок
         for button in self.buttons:
             button.draw(surface)
