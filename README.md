@@ -51,12 +51,12 @@ This is an example, how to clone this repository and lanch the game locally
 ### Installing requirements
 
 - Recommended to use virtual environment
-  1) Create venv (named .venv)
+  Create venv (named .venv)
   ```sh
   python -m venv .venv
   ```
   
-  2) Open venv
+- Open venv
   ```sh
   .\.venv\Scripts\activate
   ```
